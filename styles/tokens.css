@@ -1,0 +1,21 @@
+/* 공통 담당 영역. 변경 전 팀에 공유하고 기능 CSS에서는 이 변수를 재사용합니다. */
+:root {
+  --color-bg: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-surface-soft: #f0f2f5;
+  --color-text: #20242c;
+  --color-muted: #626a78;
+  --color-line: #e1e5eb;
+  --color-primary: #5146c7;
+  --color-primary-hover: #4137a8;
+  --color-primary-soft: #efedfb;
+  --color-success: #28724f;
+  --color-warning: #875d13;
+  --color-error: #b83c4b;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-xs: 11px; --font-sm: 12px; --font-body: 14px; --font-lg: 18px; --font-title: 28px;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px;
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 20px;
+  --shadow-card: 0 6px 22px #20242c06;
+  --sidebar-width: 218px; --assistant-width: 306px;
+}

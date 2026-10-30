@@ -1,0 +1,11 @@
+(function (D) {
+  let selected = ['warm','minimal'];
+  D.features.presets = {
+    title: '프리셋 · 비교',
+    mount(root) {
+      root.innerHTML = D.heading('A LITTLE INSPIRATION', '내 공간의 다음 가능성', '마음에 드는 구성으로 시작하거나, 두 가지 선택을 나란히 비교해 보세요.') + `<div class="presets-grid">${D.presets.map(p => `<article class="panel"><div class="presets-art">${D.scene(p.style,p.products)}</div><div class="presets-info"><div class="eyebrow">${p.label}</div><h2>${D.escape(p.name)}</h2><p>${p.description}</p><div class="presets-meta"><span>${p.width} × ${p.depth} cm</span><span>샘플 ${D.money(D.total(p.products))}</span></div><div class="actions"><button class="primary" data-apply="${p.id}">내 책상에 적용</button><button data-compare="${p.id}" aria-pressed="${selected.includes(p.id)}">${selected.includes(p.id) ? '✓ 비교 선택됨' : '비교 선택'}</button></div></div></article>`).join('')}</div><section class="panel presets-comparison"><div class="panel-heading"><h2>나란히 비교하기</h2><span class="muted">최대 2개 선택 · 샘플 정보</span></div><div class="presets-compare-grid">${selected.length ? selected.map(id => {const p=D.presets.find(item=>item.id===id);return `<article>${D.scene(p.style,p.products)}<h3>${D.escape(p.name)}</h3><dl><dt>책상 크기</dt><dd>${p.width} × ${p.depth} cm</dd><dt>구성 제품</dt><dd>${p.products.length}개</dd><dt>샘플 합계</dt><dd>${D.money(D.total(p.products))}</dd><dt>스타일</dt><dd>${p.label}</dd></dl></article>`;}).join('') : '<p class="muted">비교할 프리셋을 선택해 주세요.</p>'}</div></section><p class="notice" style="margin-top:16px">저장한 구성과 변경 사항은 현재 탭에서만 유지됩니다. 새로고침하면 기본 샘플로 돌아갑니다.</p>`;
+      root.querySelectorAll('[data-apply]').forEach(button => button.addEventListener('click', () => {const p=D.presets.find(item=>item.id===button.dataset.apply); Object.assign(D.state,{name:p.name,style:p.style,width:p.width,depth:p.depth,products:[...p.products]}); D.go('studio'); D.toast('프리셋을 내 데스크에 적용했습니다.');}));
+      root.querySelectorAll('[data-compare]').forEach(button => button.addEventListener('click', () => {const id=button.dataset.compare;if(selected.includes(id)) selected=selected.filter(item=>item!==id); else if(selected.length<2) selected.push(id); else {D.toast('선택된 프리셋 하나를 해제한 후 추가해 주세요.');return;} D.render();}));
+    }
+  };
+})(window.Deskspace);

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Deskspace — 나다운 작업공간</title>
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/shell.css">
+  <link rel="stylesheet" href="styles/features.css">
+  <script defer src="js/data.js"></script>
+  <script defer src="js/ui.js"></script>
+  <script defer src="js/features/assistant.js"></script>
+  <script defer src="js/features/studio.js"></script>
+  <script defer src="js/features/presets.js"></script>
+  <script defer src="js/features/products.js"></script>
+  <script defer src="js/features/community.js"></script>
+  <script defer src="js/features/roadmap.js"></script>
+  <script defer src="js/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#page">본문으로 이동</a>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#studio"><span class="brand-mark">d<span>•</span></span>deskspace<span class="brand-dot">.</span></a>
+      <div class="workspace-label"><span class="workspace-icon">W</span><div>나의 작업공간<small>PERSONAL STUDIO</small></div></div>
+      <div class="nav-label">WORKSPACE</div>
+      <nav aria-label="주 메뉴">
+        <a href="#studio" data-page="studio"><span data-icon="cube"></span>내 데스크 스튜디오</a>
+        <a href="#presets" data-page="presets"><span data-icon="grid"></span>프리셋 · 비교</a>
+        <a href="#products" data-page="products"><span data-icon="bag"></span>제품 둘러보기</a>
+        <a href="#community" data-page="community"><span data-icon="people"></span>커뮤니티</a>
+        <a href="#roadmap" data-page="roadmap"><span data-icon="route"></span>구매 로드맵</a>
+      </nav>
+      <div class="sidebar-note"><span class="small-orb">✦</span><strong>좋은 공간의 시작</strong><p>나의 책상에 어울리는<br>다음 아이디어를 찾아보세요.</p><a href="#presets">프리셋 살펴보기 <span>↗</span></a></div>
+      <div class="sidebar-footer"><span class="avatar">D</span><div>데모 워크스페이스<small>개인 작업공간</small></div><span class="status-dot"></span></div>
+    </aside>
+    <div class="main-shell">
+      <header class="topbar"><div class="breadcrumb">워크스페이스 <span>/</span> <strong id="breadcrumb-title">내 데스크 스튜디오</strong></div><div class="topbar-end"><span class="badge">수업용 프로토타입</span><a href="docs/HANDOFF.md" class="guide-link">팀 가이드 ↗</a></div></header>
+      <main id="page" tabindex="-1"></main>
+      <footer class="demo-footer"><span><i class="status-dot"></i> 샘플 데이터 · AI와 3D는 시연용 화면입니다</span><label>화면 상태 <select id="screen-state" aria-label="시연할 화면 상태"><option value="ready">기본</option><option value="loading">불러오는 중</option><option value="empty">내용 없음</option><option value="error">오류</option></select></label></footer>
+    </div>
+  </div>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
