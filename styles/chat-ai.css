@@ -1,0 +1,109 @@
+/* 대화형 AI 화면 전용 스타일. 공통 토큰(tokens.css)만 사용하고 .aichat- 접두사 아래만 정의합니다. */
+.aichat-conds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.aichat-conds .pill b { font-weight: 650; color: var(--color-text); margin-left: 3px; }
+.aichat-grid { display: grid; grid-template-columns: var(--assistant-width) minmax(0, 1fr); gap: 18px; align-items: start; }
+.aichat-main { display: grid; gap: 16px; min-width: 0; }
+
+/* 대화 */
+.aichat-chat { display: flex; flex-direction: column; position: sticky; top: 16px; max-height: calc(100vh - 32px); }
+.aichat-log { flex: 1; min-height: 220px; overflow-y: auto; padding: 16px 15px; display: flex; flex-direction: column; gap: 10px; }
+.aichat-msg { font-size: 12px; line-height: 1.8; padding: 11px 13px; background: var(--color-bg); border-radius: 0 12px 12px 12px; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 92%; align-self: flex-start; }
+.aichat-msg.user { align-self: flex-end; background: var(--color-primary-soft); color: #493e9f; border-radius: 12px 0 12px 12px; }
+.aichat-msg.is-example { opacity: .78; }
+.aichat-acts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.aichat-acts span { font-size: 10px; font-weight: 650; color: var(--color-primary); background: var(--color-surface); border: 1px solid var(--color-line); border-radius: 30px; padding: 2px 8px; }
+.aichat-sugs { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 15px 12px; }
+.aichat-sugs button { font-size: 10px; min-height: 28px; border-radius: 7px; padding: 5px 9px; color: var(--color-muted); font-weight: 500; }
+.aichat-form { margin: 0 12px; border: 1px solid var(--color-line); border-radius: 10px; padding: 6px; display: flex; align-items: center; gap: 5px; }
+.aichat-form:focus-within { border-color: var(--color-primary); }
+.aichat-form input { border: 0; min-width: 0; flex: 1; font-size: 12px; padding: 5px; background: transparent; }
+.aichat-form input:focus { outline: none; }
+.aichat-form button { min-width: 32px; width: 32px; height: 32px; min-height: 32px; padding: 5px; }
+.aichat-note { display: block; color: var(--color-muted); font-size: 9px; text-align: center; padding: 9px 12px 12px; }
+
+/* 추천 3안 */
+.aichat-plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 16px 16px 0; }
+.aichat-plan { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 12px; font-weight: 400; border-radius: var(--radius-md); background: var(--color-surface); }
+.aichat-plan[aria-pressed="true"] { border: 2px solid var(--color-primary); background: var(--color-primary-soft); padding: 11px; }
+.aichat-tier { font-size: 11px; font-weight: 700; color: var(--color-primary); }
+.aichat-tier em { font-style: normal; color: var(--color-warning); }
+.aichat-plan strong { font-size: 18px; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+.aichat-plan small { font-size: 10px; color: var(--color-muted); }
+.aichat-bar { width: 100%; height: 6px; border-radius: 30px; background: var(--color-surface-soft); overflow: hidden; }
+.aichat-bar i { display: block; height: 100%; background: var(--color-primary); border-radius: 30px; }
+.aichat-bar i.over { background: var(--color-error); }
+.aichat-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; padding: 14px 16px 16px; }
+.aichat-item { display: grid; gap: 2px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); padding: 8px 10px; min-width: 0; }
+.aichat-item small { font-size: 10px; color: var(--color-muted); font-weight: 600; }
+.aichat-item strong { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.aichat-item span { font-size: 10px; color: var(--color-muted); }
+.aichat-item.is-changed { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.aichat-item.is-changed small { color: var(--color-primary); }
+
+/* 배치 평면도 */
+.aichat-desk-wrap { overflow-x: auto; padding: 14px 16px 0; background-color: #f1f2f4; background-image: radial-gradient(#d9dde3 1px, transparent 1px); background-size: 18px 18px; }
+.aichat-desk { width: 100%; height: auto; display: block; min-width: 420px; }
+.aichat-desk-top { fill: #e7dccb; stroke: #c2ab8a; stroke-width: .6; }
+.aichat-riser { fill: #c2ab8a; opacity: .45; }
+.aichat-obj { fill: var(--color-surface); stroke: var(--color-text); stroke-width: .4; }
+.aichat-obj.is-mat { fill: #d6d9de; stroke: none; }
+.aichat-obj.is-changed { stroke: var(--color-primary); stroke-width: .9; }
+.aichat-obj.is-bad { stroke: var(--color-error); stroke-width: .9; }
+.aichat-ghost { fill: none; stroke: var(--color-muted); stroke-width: .4; stroke-dasharray: 1.5 1.2; }
+.aichat-desk text { font-family: var(--font-sans); fill: var(--color-text); font-size: 3.2px; }
+.aichat-desk text.aichat-dim { fill: var(--color-muted); font-size: 2.8px; }
+.aichat-legend { font-size: 10px; margin: 0; padding: 10px 16px 0; }
+.aichat-warns { display: grid; gap: 6px; padding: 10px 16px 16px; }
+.aichat-warns p { margin: 0; font-size: 12px; font-weight: 600; border-radius: var(--radius-sm); padding: 7px 10px; }
+.aichat-warns .is-warn { color: var(--color-error); background: #fbecee; }
+.aichat-warns .is-ok { color: var(--color-success); background: #e9f4ee; }
+
+/* 가격 비교 */
+.aichat-table-wrap { overflow-x: auto; padding: 4px 16px 0; }
+.aichat-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.aichat-table th, .aichat-table td { padding: 8px 6px; border-bottom: 1px solid var(--color-line); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.aichat-table th:first-child, .aichat-table td:first-child { text-align: left; white-space: normal; min-width: 130px; }
+.aichat-table th { font-size: 10px; color: var(--color-muted); font-weight: 650; }
+.aichat-table .is-low { color: var(--color-success); font-weight: 700; }
+.aichat-table .is-low small { font-size: 9px; }
+.aichat-table .is-na { color: var(--color-muted); }
+.aichat-table tfoot td { font-weight: 700; border-bottom: 0; }
+.aichat-total { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 12px 16px 0; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--color-primary-soft); }
+.aichat-total span { font-size: 12px; color: var(--color-muted); }
+.aichat-total strong { font-size: 20px; color: var(--color-primary); font-variant-numeric: tabular-nums; }
+.aichat-shop { font-size: 11px; margin: 10px 16px 16px; }
+
+@media (max-width: 1050px) { .aichat-grid { grid-template-columns: 1fr; } .aichat-chat { position: static; max-height: none; } .aichat-log { max-height: 320px; } }
+@media (max-width: 600px) { .aichat-plans { grid-template-columns: 1fr; } }
+.aichat-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* ---------- 발표용 데스크톱 레이아웃 (1280px 이상): 한 화면에 대화 · 추천/평면도 · 가격표 3열 ---------- */
+.aichat-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.aichat-table td small { display: block; font-size: 9px; color: var(--color-muted); font-weight: 600; }
+.aichat-table tr.is-changed td { background: var(--color-primary-soft); }
+.aichat-table tr.is-changed td small { color: var(--color-primary); }
+@media (min-width: 1280px) {
+  .aichat-grid { grid-template-columns: var(--assistant-width) minmax(0, 1fr) minmax(330px, 30%); align-items: stretch; height: max(560px, calc(100vh - 318px)); }
+  .aichat-chat { position: static; max-height: none; height: 100%; min-height: 0; }
+  .aichat-log { min-height: 0; }
+  .aichat-main { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .aichat-plans-panel { flex: none; }
+  .aichat-plans { padding: 12px; gap: 8px; }
+  .aichat-plan { padding: 10px 12px; gap: 3px; }
+  .aichat-plan[aria-pressed="true"] { padding: 9px 11px; }
+  .aichat-desk-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .aichat-desk-wrap { flex: 1; min-height: 0; display: flex; padding: 10px 14px 0; overflow: hidden; }
+  .aichat-desk { min-width: 0; height: 100%; }
+  .aichat-legend { padding: 8px 14px 0; }
+  .aichat-warns { padding: 8px 14px 12px; }
+  .aichat-side { min-height: 0; }
+  .aichat-price-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .aichat-table-wrap { flex: 1; min-height: 0; overflow: auto; }
+  .aichat-table th, .aichat-table td { padding: 6px 5px; }
+  .aichat-table th:first-child, .aichat-table td:first-child { min-width: 120px; }
+  .aichat-total { margin: 10px 14px 0; padding: 10px 12px; }
+  .aichat-shop { margin: 8px 14px 12px; }
+  .aichat-notice { margin: 0; flex: none; }
+}
+@media (min-width: 1280px) and (max-height: 820px) { .aichat-legend { display: none; } }
+@media (max-width: 1279px) { .aichat-side { grid-column: 1 / -1; } }
