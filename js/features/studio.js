@@ -19,8 +19,10 @@
 
   /* ---------- 로컬 상태 (이 탭에서만 유지) ---------- */
   const photos = { desk: '', style: '' };
-  const ui = { selected: null, before: null, estimated: false, ownChange: false, big: false, wallEdit: null, wallTool: 'line', wePos: null };
-  const view = { theta: -0.6, phi: 0.5, radius: 0 };
+  const ui = { selected: null, before: null, estimated: false, measured: null, ownChange: false, big: false, wallEdit: null, wallTool: 'line', wePos: null };
+  // 카메라: target(바라보는 점) + 방향(theta·phi) + 거리(radius). target이 null이면 책상 가운데를 봅니다.
+  const view = { theta: -0.6, phi: 0.5, radius: 0, target: null };
+  const resetView = () => Object.assign(view, { theta: -0.6, phi: 0.5, radius: 0, target: null });
   let observer = null;
 
   /* ---------- 제품 치수 ----------
@@ -222,8 +224,8 @@
     };
     function camera() {
       const H = room().height;
-      if (!view.radius) view.radius = Math.max(D.state.width, D.state.depth * 1.6) * 1.5 + 60;
-      const T = v3(0, H - 6, 0), cp = Math.cos(view.phi);
+      if (!view.radius) { view.radius = Math.max(D.state.width, D.state.depth * 1.6) * 1.5 + 60; view.target = null; }
+      const T = view.target || v3(0, H - 6, 0), cp = Math.cos(view.phi);
       const E = add(T, mul(v3(cp * Math.sin(view.theta), Math.sin(view.phi), cp * Math.cos(view.theta)), view.radius));
       const f = norm(sub(T, E)), right = norm(cross(f, v3(0, 1, 0)));
       sim.focal = sim.h / (2 * Math.tan(0.42));
@@ -231,13 +233,28 @@
     }
     function project(P) {
       const c = sim.cam, v = sub(P, c.E), z = dot(v, c.f);
-      return z < 2 ? null : { x: sim.w / 2 + dot(v, c.right) * sim.focal / z, y: sim.h / 2 - dot(v, c.up) * sim.focal / z };
+      return z < NEAR - 0.01 ? null : { x: sim.w / 2 + dot(v, c.right) * sim.focal / z, y: sim.h / 2 - dot(v, c.up) * sim.focal / z };
     }
     const ray = (sx, sy) => { const c = sim.cam; return norm(add(c.f, add(mul(c.right, (sx - sim.w / 2) / sim.focal), mul(c.up, (sim.h / 2 - sy) / sim.focal)))); };
     const hitY = (sx, sy, y) => { const d = ray(sx, sy), E = sim.cam.E; if (Math.abs(d.y) < 1e-6) return null; const t = (y - E.y) / d.y; return t > 0 ? add(E, mul(d, t)) : null; };
 
+    // 카메라 바로 앞(NEAR)에서 면을 잘라 그립니다. 카메라가 방 안으로 들어가도 바닥·벽이 사라지지 않게.
+    const NEAR = 3;
+    function clipNear(pts) {
+      const c = sim.cam, z = pts.map(P => dot(sub(P, c.E), c.f));
+      if (z.every(v => v >= NEAR)) return pts;
+      if (z.every(v => v < NEAR)) return null;
+      const out = [];
+      for (let i = 0; i < pts.length; i++) {
+        const j = (i + 1) % pts.length, A = pts[i], B = pts[j], za = z[i], zb = z[j];
+        if (za >= NEAR) out.push(A);
+        if ((za >= NEAR) !== (zb >= NEAR)) out.push(add(A, mul(sub(B, A), (NEAR - za) / (zb - za))));
+      }
+      return out.length >= 3 ? out : null;
+    }
     function face(pts, fill, layer, id, stroke) {
-      const p2 = pts.map(project); if (p2.some(p => !p)) return;
+      const cut = clipNear(pts); if (!cut) return;
+      const p2 = cut.map(project); if (p2.some(p => !p)) return;
       const c = mul(pts.reduce(add, v3(0, 0, 0)), 1 / pts.length);
       sim.faces.push({ p2, depth: dot(sub(c, sim.cam.E), sim.cam.f), fill, layer, id, stroke });
     }
@@ -287,7 +304,7 @@
     sim.draw = () => {
       if (!sim.w || !sim.h) return;
       const W = D.state.width, Dp = D.state.depth, R = room(), H = R.height, L = layout(), chk = checks();
-      const theme = THEME[D.state.style] || THEME.warm;
+      const theme = themeNow();
       sim.cam = camera(); sim.faces = []; sim.labels = [];
       const wallH = 230, E = sim.cam.E, WL = walls();
       // 바닥: 벽 도면과 책상을 모두 덮는 사각형
@@ -368,27 +385,68 @@
       return null;
     };
 
-    // 조작: 빈 곳 드래그 = 시점 회전 · 제품 드래그 = 이동 · 휠 = 확대 · 방향키/R = 이동/회전
+    /* 조작 (유니티 Scene 뷰 방식) [구현]
+     *  좌클릭 드래그(빈 곳·벽) = 카메라 위치 이동(팬)   · 좌클릭 드래그(제품) = 제품 이동
+     *  우클릭 드래그          = 그 자리에서 시점 돌리기 · 우클릭 누른 채 W/A/S/D/Q/E = 날아다니기
+     *  Alt + 좌클릭 드래그    = 바라보는 점 중심으로 돌기 · 가운데 버튼 드래그 = 카메라 이동
+     *  휠 = 앞뒤로 이동 · F = 선택한 제품(없으면 책상) 보기 · 빈 곳 더블클릭 = 시점 처음으로
+     *  벽을 클릭(끌지 않음) = 벽 도면 창 · 제품 선택 후 방향키/R = 이동/회전 */
     const pt = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
     const grabY = id => room().height + baseY(id, layout()) + spec(id).h / 2;
+    const offset = () => { const cp = Math.cos(view.phi); return v3(cp * Math.sin(view.theta), Math.sin(view.phi), cp * Math.cos(view.theta)); };
+    const target = () => view.target || v3(0, room().height - 6, 0);
+    const clampPitch = v => Math.min(1.45, Math.max(-0.35, v));
+    const keepAboveFloor = () => { const E = add(target(), mul(offset(), view.radius)); if (E.y < 8) view.target = v3(target().x, target().y + (8 - E.y), target().z); };
+    function pan(dx, dy) { // 화면 픽셀만큼 카메라와 바라보는 점을 함께 옮깁니다
+      const c = sim.cam; if (!c) return;
+      const k = view.radius / sim.focal;
+      view.target = add(target(), add(mul(c.right, -dx * k), mul(c.up, dy * k)));
+      keepAboveFloor();
+    }
+    function look(theta, phi) { // 카메라 위치는 그대로, 바라보는 방향만 바꿈
+      const E = add(target(), mul(offset(), view.radius));
+      view.theta = theta; view.phi = clampPitch(phi);
+      view.target = sub(E, mul(offset(), view.radius));
+    }
+    function fly(dir, dist) { // 카메라를 앞뒤·좌우·위아래로
+      const c = sim.cam; if (!c) return;
+      const flat = norm(v3(c.f.x, 0, c.f.z)), v = { w: flat, s: mul(flat, -1), d: c.right, a: mul(c.right, -1), e: v3(0, 1, 0), q: v3(0, -1, 0) }[dir];
+      if (v) { view.target = add(target(), mul(v, dist)); keepAboveFloor(); }
+    }
+    function focusOn(id) {
+      const L = layout();
+      if (id && L[id]) { const s = spec(id), p = L[id]; view.target = v3(p.x, room().height + baseY(id, L) + s.h / 2, p.z); view.radius = Math.max(70, Math.max(s.w, s.h) * 2.4); }
+      else { view.target = null; resetView(); }
+      keepAboveFloor();
+    }
+
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
     canvas.addEventListener('pointerdown', e => {
-      const { x, y } = pt(e), id = sim.pick(x, y);
+      const { x, y } = pt(e);
       canvas.setPointerCapture(e.pointerId); canvas.focus({ preventScroll: true });
-      if (id && id.startsWith('wall:')) sim.drag = { kind: 'orbit', x, y, theta: view.theta, phi: view.phi, moved: false, wall: id.slice(5) };
+      const base = { x, y, lx: x, ly: y, theta: view.theta, phi: view.phi, moved: false };
+      if (e.button === 2) { sim.drag = Object.assign(base, { kind: 'look' }); canvas.style.cursor = 'crosshair'; return; }
+      if (e.button === 1) { e.preventDefault(); sim.drag = Object.assign(base, { kind: 'pan' }); return; }
+      if (e.button !== 0) return;
+      if (e.altKey) { sim.drag = Object.assign(base, { kind: 'orbit' }); return; }
+      const id = sim.pick(x, y);
+      if (id && id.startsWith('wall:')) sim.drag = Object.assign(base, { kind: 'pan', wall: id.slice(5) });
       else if (id) {
         const p = layout()[id], hit = hitY(x, y, grabY(id));
         sim.drag = { kind: 'item', id, y: grabY(id), moved: false, off: hit ? { x: p.x - hit.x, z: p.z - hit.z } : { x: 0, z: 0 } };
         if (ui.selected !== id) { ui.selected = id; onChange('select'); }
-      } else sim.drag = { kind: 'orbit', x, y, theta: view.theta, phi: view.phi, moved: false };
+      } else sim.drag = Object.assign(base, { kind: 'pan' });
       sim.draw();
     });
     canvas.addEventListener('pointermove', e => {
       const d = sim.drag, { x, y } = pt(e);
       if (!d) { const id = sim.pick(x, y); canvas.style.cursor = id ? (id.startsWith('wall:') ? 'pointer' : 'move') : ''; return; }
-      if (d.kind === 'orbit') {
+      if (d.kind !== 'item') {
         if (Math.abs(x - d.x) + Math.abs(y - d.y) > 3) d.moved = true;
-        view.theta = d.theta - (x - d.x) * 0.008; view.phi = Math.min(1.35, Math.max(0.12, d.phi + (y - d.y) * 0.006));
-        sim.draw(); return;
+        if (d.kind === 'pan') { canvas.style.cursor = 'move'; pan(x - d.lx, y - d.ly); }
+        else if (d.kind === 'look') look(d.theta - (x - d.x) * 0.003, d.phi + (y - d.y) * 0.003); // 오른쪽으로 끌면 오른쪽, 위로 끌면 위를 봄
+        else if (d.kind === 'orbit') { view.theta = d.theta - (x - d.x) * 0.008; view.phi = clampPitch(d.phi + (y - d.y) * 0.006); keepAboveFloor(); }
+        d.lx = x; d.ly = y; sim.draw(); return;
       }
       const hit = hitY(x, y, d.y); if (!hit) return;
       const p = layout()[d.id], W = D.state.width, Dp = D.state.depth;
@@ -397,18 +455,30 @@
       d.moved = true; sim.draw(); onChange('move');
     });
     const end = () => {
-      const d = sim.drag; sim.drag = null; if (!d) return;
-      if (d.kind === 'orbit' && !d.moved && d.wall) { onWall(d.wall); return; }
-      if (d.kind === 'orbit' && !d.moved && ui.selected) { ui.selected = null; onChange('select'); sim.draw(); }
+      const d = sim.drag; sim.drag = null; canvas.style.cursor = ''; if (!d) return;
+      if (d.kind === 'pan' && !d.moved && d.wall) { onWall(d.wall); return; }
+      if (d.kind === 'pan' && !d.moved && ui.selected) { ui.selected = null; onChange('select'); sim.draw(); }
       if (d.kind === 'item' && d.moved) onChange('moved');
     };
     canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
-    canvas.addEventListener('wheel', e => { e.preventDefault(); view.radius = Math.min(560, Math.max(110, view.radius * Math.exp(e.deltaY * 0.001))); sim.draw(); }, { passive: false });
+    canvas.addEventListener('dblclick', e => { const { x, y } = pt(e); if (sim.pick(x, y)) return; resetView(); sim.draw(); });
+    // 휠: 바라보는 방향으로 앞뒤 이동 (가까이 가면 바라보는 점도 함께 밀려나 계속 들어갈 수 있음)
+    canvas.addEventListener('wheel', e => {
+      e.preventDefault();
+      const step = Math.max(-80, Math.min(80, e.deltaY)) * view.radius * 0.0012;
+      const next = view.radius + step;
+      if (next < 60) { const c = sim.cam; if (c) view.target = add(target(), mul(c.f, 60 - next)); view.radius = 60; }
+      else view.radius = Math.min(800, next);
+      keepAboveFloor(); sim.draw();
+    }, { passive: false });
     canvas.addEventListener('keydown', e => {
+      const key = e.key.toLowerCase();
+      if (sim.drag && sim.drag.kind === 'look' && 'wasdqe'.includes(key) && key.length === 1) { e.preventDefault(); fly(key, e.shiftKey ? 25 : 8); sim.draw(); return; }
+      if (key === 'f') { e.preventDefault(); focusOn(ui.selected); sim.draw(); return; }
       const id = ui.selected; if (!id) return; const p = layout()[id], k = e.shiftKey ? 5 : 1;
       const moves = { ArrowLeft: ['x', -k], ArrowRight: ['x', k], ArrowUp: ['z', -k], ArrowDown: ['z', k] };
       if (moves[e.key]) { e.preventDefault(); p[moves[e.key][0]] += moves[e.key][1]; }
-      else if (e.key === 'r' || e.key === 'R') p.rot = ((p.rot || 0) + 90) % 360;
+      else if (key === 'r') p.rot = ((p.rot || 0) + 90) % 360;
       else if (e.key === 'Escape') { if (ui.big) return; ui.selected = null; onChange('select'); sim.draw(); return; }
       else return;
       sim.draw(); onChange('moved');
@@ -513,6 +583,201 @@
       <p class="sim-we-hint">${hint}</p></div>`;
   }
 
+  /* ---------- 사진 → 3D 반영 [구현] ----------
+   * 외부 AI 없이 브라우저 안에서 사진의 픽셀 색만 분석합니다. (사진은 서버로 보내지 않음)
+   * - 책상 사진: 아래 가운데 영역 = 책상 상판 색, 위쪽 영역 = 벽 색
+   * - 스타일 사진: 대표 색 5개(k-means) → 역할(벽·상판·다리·포인트·화면) 배정,
+   *   세 스타일 색표와 가장 가까운 스타일을 고릅니다 (색 기반 단순 추정)
+   * 결과는 room().deskPhoto / room().stylePhoto 에 저장되고 3D 색에 바로 반영됩니다.
+   * 우선순위: 스타일 사진(원하는 모습) > 책상 사진(지금 모습) > 기본 스타일 색 */
+  const toHex = c => '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+  const lum = c => (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
+  function pixels(img, maxSide = 120) {
+    const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * k)), h = Math.max(1, Math.round(img.naturalHeight * k));
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(img, 0, 0, w, h);
+    return { w, h, data: cx.getImageData(0, 0, w, h).data };
+  }
+  function regionColor(px, x0, y0, x1, y1) { // 영역에서 가장 많은 색 묶음의 평균
+    const bins = new Map();
+    for (let y = Math.floor(y0 * px.h); y < Math.ceil(y1 * px.h); y++) for (let x = Math.floor(x0 * px.w); x < Math.ceil(x1 * px.w); x++) {
+      const i = (y * px.w + x) * 4; if (px.data[i + 3] < 128) continue;
+      const c = [px.data[i], px.data[i + 1], px.data[i + 2]], key = c.map(v => v >> 5).join(',');
+      const bin = bins.get(key) || { n: 0, sum: [0, 0, 0] }; bin.n++; c.forEach((v, j) => { bin.sum[j] += v; }); bins.set(key, bin);
+    }
+    const best = [...bins.values()].sort((a, b) => b.n - a.n)[0];
+    return best ? best.sum.map(v => v / best.n) : [200, 200, 200];
+  }
+  function palette(px, k = 5) {
+    const pts = [];
+    for (let i = 0; i < px.data.length; i += 4 * 2) if (px.data[i + 3] >= 128) pts.push([px.data[i], px.data[i + 1], px.data[i + 2]]);
+    if (!pts.length) return [];
+    let cs = Array.from({ length: k }, (_, j) => pts[Math.floor((j + 0.5) * pts.length / k)].slice());
+    let groups = [];
+    for (let it = 0; it < 10; it++) {
+      groups = cs.map(() => ({ n: 0, sum: [0, 0, 0] }));
+      pts.forEach(p => { let bi = 0, bd = Infinity; cs.forEach((c, j) => { const d = (p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2; if (d < bd) { bd = d; bi = j; } }); const g = groups[bi]; g.n++; p.forEach((v, j) => { g.sum[j] += v; }); });
+      cs = groups.map((g, j) => g.n ? g.sum.map(v => v / g.n) : cs[j]);
+    }
+    return cs.map((c, j) => ({ c, w: groups[j].n / pts.length })).filter(x => x.w > 0.01).sort((a, b) => b.w - a.w);
+  }
+  function analyzeDesk(img) {
+    const px = pixels(img);
+    return { top: toHex(regionColor(px, 0.2, 0.6, 0.8, 0.92)), wall: toHex(regionColor(px, 0.1, 0.04, 0.9, 0.32)), on: true };
+  }
+  const STYLE_NAME = { warm: '내추럴', minimal: '미니멀', creative: '크리에이티브' };
+  function analyzeStyle(img) {
+    const pal = palette(pixels(img));
+    // 스타일 판정 (색 비중으로 가중한 평균값 기준)
+    //   따뜻한 기운(빨강-파랑)이 있으면 내추럴, 색이 거의 없으면(무채색) 미니멀, 차갑거나 색이 진하면 크리에이티브
+    const avg = f => pal.reduce((sum, p) => sum + p.w * f(p.c), 0) / (pal.reduce((sum, p) => sum + p.w, 0) || 1);
+    const warmth = avg(c => (c[0] - c[2]) / 255), colorful = avg(c => (Math.max(...c) - Math.min(...c)) / 255);
+    const score = [{ key: warmth > 0.06 ? 'warm' : colorful < 0.12 ? 'minimal' : 'creative' }];
+    // 역할 배정: 가장 밝은 색 = 벽, 가장 어두운 색 = 다리, 나머지 중 비중 큰 색 = 상판, 남은 색 중 가장 선명한 색 = 포인트
+    const byL = pal.slice().sort((a, b) => lum(b.c) - lum(a.c));
+    const wall = byL[0], leg = byL[byL.length - 1];
+    const top = pal.filter(p => p !== wall && p !== leg)[0] || leg;
+    const chroma = c => Math.max(...c) - Math.min(...c); // 밝은 색에서 과하게 커지는 HSL 채도 대신 색의 진하기
+    const vivid = pal.filter(p => p !== wall && p !== top).sort((a, b) => chroma(b.c) - chroma(a.c))[0];
+    const accent = vivid && chroma(vivid.c) >= 40 ? vivid : top;
+    // 사진 색이 한두 가지뿐이면 벽은 밝게, 다리는 어둡게 벌려 3D에서 구분되게 합니다.
+    let wallC = wall.c, legC = leg.c;
+    if (lum(wallC) - lum(legC) < 0.15) { wallC = wall.c.map(v => v + (255 - v) * 0.55); legC = leg.c.map(v => v * 0.5); }
+    return { style: score[0].key, palette: pal.map(p => ({ hex: toHex(p.c), w: Math.round(p.w * 100) })),
+      colors: { wall: toHex(wallC), top: toHex(top.c), leg: toHex(legC), accent: toHex(accent.c), screen: toHex(wallC.map((v, j) => v * 0.6 + hex(THEME[score[0].key].screen)[j] * 0.4)) }, on: false };
+  }
+  function themeNow() {
+    const R = room(), t = Object.assign({}, THEME[D.state.style] || THEME.warm);
+    if (R.deskPhoto && R.deskPhoto.on) Object.assign(t, { top: R.deskPhoto.top, wall: R.deskPhoto.wall });
+    if (R.stylePhoto && R.stylePhoto.on) Object.assign(t, R.stylePhoto.colors);
+    return t;
+  }
+  function photoSourceText() {
+    const R = room(), a = [];
+    if (R.stylePhoto && R.stylePhoto.on) a.push('스타일 사진 색');
+    else if (R.deskPhoto && R.deskPhoto.on) a.push('책상 사진 색');
+    return a.length ? ` · ${a[0]} 반영 중` : '';
+  }
+  const sw = (hexc, label) => `<span class="sim-sw"><i style="background:${hexc}"></i>${label}</span>`;
+  function deskPhotoHTML() {
+    const P = room().deskPhoto; if (!photos.desk || !P) return '';
+    return `<div class="sim-photo-result"><div class="sim-row"><strong>사진에서 읽은 색</strong>${TAG.real}</div>
+      <div class="sim-sws">${sw(P.top, '책상 상판')}${sw(P.wall, '벽')}</div>
+      <label class="sim-check"><input type="checkbox" data-photo-use="desk" ${P.on ? 'checked' : ''}> 3D 책상·벽 색에 반영</label>
+      <p class="muted">사진 아래 가운데를 책상, 위쪽을 벽으로 보고 가장 많은 색을 고릅니다. 책상이 사진 가운데 아래에 오게 찍으면 정확해집니다.</p></div>`;
+  }
+  function stylePhotoHTML() {
+    const P = room().stylePhoto; if (!photos.style || !P) return '';
+    return `<div class="sim-photo-result"><div class="sim-row"><strong>가까운 스타일: ${STYLE_NAME[P.style]}</strong>${TAG.real}<span class="muted">색 기반 단순 추정</span></div>
+      <div class="sim-sws">${P.palette.map(p => sw(p.hex, `${p.w}%`)).join('')}</div>
+      <div class="sim-sws">${sw(P.colors.wall, '벽')}${sw(P.colors.top, '상판')}${sw(P.colors.leg, '다리')}${sw(P.colors.accent, '포인트')}</div>
+      <label class="sim-check"><input type="checkbox" data-photo-use="style" ${P.on ? 'checked' : ''}> 이 색으로 3D 바꾸기 (스타일 '${STYLE_NAME[P.style]}'로 전환)</label>
+      <p class="muted">대표 색 5개를 뽑아 가장 밝은 색은 벽, 가장 어두운 색은 다리, 가장 선명한 색은 조명 같은 포인트에 씁니다. 사진 속 가구 종류나 배치는 읽지 않습니다.</p></div>`;
+  }
+
+  /* ---------- 책상 사진으로 치수 재기 [구현] ----------
+   * 크기를 아는 기준 물건(A4 용지 등)의 양 끝과 책상 양 끝을 사진에서 클릭하면, 길이 비율로 책상 너비를 계산합니다.
+   * 높이(바닥~상판)는 선택 항목입니다. 사진의 원근 때문에 오차가 생길 수 있어 '약 ○cm'로 안내합니다.
+   * 자동 인식(AI)은 쓰지 않습니다. */
+  const REF = { a4long: ['A4 용지 긴 변', 29.7], a4short: ['A4 용지 짧은 변', 21], card: ['신용카드 긴 변', 8.56], custom: ['직접 입력', 30] };
+  const MSTEP = { ref: ['기준 물건', '#1f8a8a'], width: ['책상 너비', '#e07a2f'], height: ['책상 높이 (선택)', '#7a5cc4'] };
+  let measure = null; // 사진마다 하나 (새 사진을 올리면 초기화)
+  const dist2 = (p, q) => Math.hypot(q.x - p.x, q.y - p.y);
+  function measureResult() {
+    const m = measure; if (!m || m.ref.length < 2) return { scale: 0 };
+    const refPx = dist2(m.ref[0], m.ref[1]); if (refPx < 3) return { scale: 0 };
+    const scale = m.refLen / refPx, out = { scale };
+    if (m.width.length === 2) out.width = dist2(m.width[0], m.width[1]) * scale;
+    if (m.height.length === 2) out.height = dist2(m.height[0], m.height[1]) * scale;
+    return out;
+  }
+  function openMeasure(onApply) {
+    const img = new Image(); img.src = photos.desk;
+    img.onload = () => {
+      const W = img.naturalWidth, H = img.naturalHeight, r = Math.max(W, H) / 110;
+      if (!measure) measure = { ref: [], width: [], height: [], refKind: 'a4long', refLen: 29.7, step: 'ref' };
+      const m = measure;
+      const box = document.createElement('div'); box.className = 'sim-ms-wrap';
+      box.innerHTML = `<div class="sim-ms-back"></div><div class="sim-ms" role="dialog" aria-modal="true" aria-label="책상 사진에서 치수 재기">
+        <div class="sim-ms-photo"><div class="sim-ms-stage"><img src="${photos.desk}" alt="치수를 잴 책상 사진"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"></svg></div></div>
+        <div class="sim-ms-side">
+          <div class="sim-row"><strong>사진에서 치수 재기</strong>${TAG.real}<span class="sim-push"></span><button type="button" data-ms="close" aria-label="닫기">✕</button></div>
+          <p class="muted">크기를 아는 물건과 책상 양 끝을 클릭하면 비율로 계산합니다. 점은 끌어서 고칠 수 있습니다.</p>
+          <ol class="sim-ms-steps"></ol>
+          <label class="sim-ms-ref">기준 물건 <select data-ms="kind">${Object.entries(REF).map(([k, [l, v]]) => `<option value="${k}" ${m.refKind === k ? 'selected' : ''}>${l}${k === 'custom' ? '' : ` (${v}cm)`}</option>`).join('')}</select>
+            <input type="number" data-ms="len" min="1" max="300" step="0.1" value="${m.refLen}" ${m.refKind === 'custom' ? '' : 'disabled'} aria-label="기준 물건 길이 (cm)"> cm</label>
+          <div class="sim-ms-out" aria-live="polite"></div>
+          <p class="muted sim-ms-tip">정확하게 재는 법: 기준 물건을 책상 앞쪽 가장자리에 책상과 나란히 두고, 정면에서 수평으로 찍어 주세요. 비스듬히 찍으면 원근 때문에 몇 cm 차이가 날 수 있습니다.</p>
+          <div class="sim-row"><button type="button" data-ms="reset">점 모두 지우기</button><span class="sim-push"></span><button type="button" class="primary" data-ms="apply" disabled>3D에 적용</button></div>
+        </div></div>`;
+      document.body.appendChild(box);
+      document.documentElement.classList.add('sim-lock');
+      const svg = box.querySelector('svg'), dlg = box.querySelector('.sim-ms');
+      const lens = () => {
+        const res = measureResult();
+        return { ref: `${m.refLen}cm`, width: res.width ? `약 ${Math.round(res.width)}cm` : '', height: res.height ? `약 ${Math.round(res.height)}cm` : '' };
+      };
+      const draw = () => {
+        const L = lens(); let o = '';
+        Object.keys(MSTEP).forEach(k => {
+          const pts = m[k], col = MSTEP[k][1];
+          if (pts.length === 2) {
+            o += `<line x1="${pts[0].x}" y1="${pts[0].y}" x2="${pts[1].x}" y2="${pts[1].y}" stroke="#fff" stroke-width="${r * 0.9}" stroke-linecap="round"/><line x1="${pts[0].x}" y1="${pts[0].y}" x2="${pts[1].x}" y2="${pts[1].y}" stroke="${col}" stroke-width="${r * 0.45}" stroke-linecap="round"/>`;
+            const mx = (pts[0].x + pts[1].x) / 2, my = (pts[0].y + pts[1].y) / 2 + (k === 'ref' ? r * 4.2 : -r * 1.6), t = `${MSTEP[k][0].replace(' (선택)', '')} ${L[k]}`;
+            o += `<text x="${mx}" y="${my}" font-size="${r * 2.1}" text-anchor="middle" fill="${col}" stroke="#fff" stroke-width="${r * 0.6}" paint-order="stroke" font-weight="700">${t}</text>`;
+          }
+          pts.forEach((q, i) => { o += `<circle cx="${q.x}" cy="${q.y}" r="${r}" fill="${m.step === k ? col : '#fff'}" stroke="${col}" stroke-width="${r * 0.35}" data-pt="${k}:${i}" style="cursor:move"/>`; });
+        });
+        svg.innerHTML = o;
+        const res = measureResult();
+        box.querySelector('.sim-ms-steps').innerHTML = Object.entries(MSTEP).map(([k, [l, col]]) => {
+          const n = m[k].length, done = n === 2;
+          const what = k === 'ref' ? '기준 물건의 양 끝' : k === 'width' ? '책상 상판의 왼쪽 끝과 오른쪽 끝' : '바닥(책상 다리 끝)과 상판 윗면';
+          return `<li ${m.step === k ? 'aria-current="step"' : ''}><button type="button" data-ms-step="${k}" style="--c:${col}"><b>${l}</b><span>${done ? `✓ ${k === 'ref' ? lens().ref : lens()[k]}` : `${what}을 클릭 (${n}/2)`}</span></button></li>`;
+        }).join('');
+        box.querySelector('.sim-ms-out').innerHTML = res.width
+          ? `<strong>책상 너비 약 ${Math.round(res.width)}cm</strong>${res.height ? ` · 높이 약 ${Math.round(res.height)}cm` : ''}${res.width < 80 || res.width > 240 ? `<br><span class="sim-warn">입력 범위(80~240cm)를 벗어나 ${res.width < 80 ? 80 : 240}cm로 맞춰 적용됩니다</span>` : ''}${res.height && (res.height < 60 || res.height > 110) ? `<br><span class="sim-warn">높이는 60~110cm 범위로 맞춰 적용됩니다</span>` : ''}`
+          : '<span class="muted">기준 물건과 책상 너비를 재면 결과가 나옵니다.</span>';
+        box.querySelector('[data-ms="apply"]').disabled = !res.width;
+      };
+      const toImg = e => { const q = svg.createSVGPoint(); q.x = e.clientX; q.y = e.clientY; const p = q.matrixTransform(svg.getScreenCTM().inverse()); return { x: Math.max(0, Math.min(W, Math.round(p.x))), y: Math.max(0, Math.min(H, Math.round(p.y))) }; };
+      const nextStep = () => { m.step = ['ref', 'width', 'height'].find(k => m[k].length < 2) || m.step; };
+      let drag = null;
+      const stage = box.querySelector('.sim-ms-stage');
+      stage.addEventListener('pointerdown', e => {
+        e.preventDefault(); stage.setPointerCapture(e.pointerId);
+        const h = e.target.closest('[data-pt]');
+        if (h) { const [k, i] = h.dataset.pt.split(':'); drag = { k, i: Number(i) }; m.step = k; draw(); return; }
+        const q = toImg(e), pts = m[m.step];
+        if (pts.length >= 2) pts.length = 0; // 다 찍힌 단계를 다시 고르면 새로 찍기
+        pts.push(q); drag = { k: m.step, i: pts.length - 1 };
+        draw();
+      });
+      stage.addEventListener('pointermove', e => { if (!drag) return; m[drag.k][drag.i] = toImg(e); draw(); });
+      stage.addEventListener('pointerup', () => { if (!drag) return; drag = null; if (m[m.step].length === 2) nextStep(); draw(); });
+      const close = () => { box.remove(); if (!ui.big) document.documentElement.classList.remove('sim-lock'); document.removeEventListener('keydown', onKey, true); document.querySelector('#sim-measure')?.focus(); };
+      const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+      document.addEventListener('keydown', onKey, true);
+      box.querySelector('.sim-ms-back').addEventListener('click', close);
+      box.addEventListener('click', e => {
+        const t = e.target.closest('button'); if (!t) return;
+        if (t.dataset.msStep) { m.step = t.dataset.msStep; draw(); return; }
+        if (t.dataset.ms === 'close') close();
+        if (t.dataset.ms === 'reset') { m.ref = []; m.width = []; m.height = []; m.step = 'ref'; draw(); }
+        if (t.dataset.ms === 'apply') { const res = measureResult(); close(); onApply(res); }
+      });
+      box.querySelector('[data-ms="kind"]').addEventListener('change', e => {
+        m.refKind = e.target.value; const inp = box.querySelector('[data-ms="len"]');
+        inp.disabled = m.refKind !== 'custom'; if (m.refKind !== 'custom') { m.refLen = REF[m.refKind][1]; inp.value = m.refLen; } else inp.focus();
+        draw();
+      });
+      box.querySelector('[data-ms="len"]').addEventListener('input', e => { const v = Number(e.target.value); if (v > 0) { m.refLen = v; draw(); } });
+      draw(); dlg.querySelector('[data-ms="close"]').focus();
+    };
+    img.onerror = () => D.toast('사진을 다시 불러오지 못했습니다. 사진을 다시 선택해 주세요.');
+  }
+
   /* ---------- 크게 보기 [구현] ----------
    * 3D 화면만 브라우저 창 크기로 띄웁니다. '원래 화면으로' 버튼, Esc, 바깥 어두운 곳 클릭으로 돌아옵니다.
    * 같은 캔버스를 그대로 키우므로 시점·선택·벽 도면 창이 유지됩니다. */
@@ -548,6 +813,8 @@
 .sim-big-btn{position:absolute;top:10px;right:10px;z-index:4;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:6px 10px;border-radius:8px;border:1px solid rgba(27,42,65,.18);background:rgba(255,255,255,.92);color:#1b2a41;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.08)}
 .sim-big-btn:hover{background:#fff;border-color:#e07a2f}.sim-big-btn kbd{font:inherit;font-size:11px;padding:0 5px;border-radius:4px;background:#eef0f3;border:1px solid #d6dbe1}
 .sim-big-info{display:none}
+.sim-hint{position:absolute;left:10px;bottom:8px;z-index:3;font-size:11px;color:#34404b;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:6px;pointer-events:none}
+.sim-viewport.big .sim-hint{display:none}
 .sim-backdrop{display:none}
 html.sim-lock,html.sim-lock body{overflow:hidden}
 html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba(27,42,65,.55);z-index:999}
@@ -557,6 +824,22 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
 .sim-viewport.big .sim-big-info span{background:rgba(255,255,255,.88);padding:4px 9px;border-radius:8px}
 .sim-viewport.big .sim-we{top:60px}
 @media (max-width:640px){.studio-canvas .sim-viewport.big{inset:8px}}
+.sim-ms-back{position:fixed;inset:0;background:rgba(27,42,65,.6);z-index:1100}
+.sim-ms{position:fixed;inset:24px;z-index:1101;background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.35);display:grid;grid-template-columns:1fr 320px;overflow:hidden;font-size:13px}
+.sim-ms-photo{background:#29303b;display:grid;place-items:center;padding:16px;min-height:0;overflow:auto}
+.sim-ms-stage{position:relative;line-height:0;touch-action:none;cursor:crosshair;max-width:100%}
+.sim-ms-stage img{max-width:100%;max-height:calc(100vh - 80px);display:block;user-select:none;-webkit-user-drag:none}
+.sim-ms-stage svg{position:absolute;inset:0;width:100%;height:100%}
+.sim-ms-side{padding:16px;display:grid;gap:10px;align-content:start;overflow:auto}
+.sim-ms-side p{margin:0;line-height:1.5}
+.sim-ms-steps{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.sim-ms-steps button{all:unset;box-sizing:border-box;width:100%;cursor:pointer;display:grid;gap:2px;padding:8px 10px;border-radius:10px;border:1px solid #e3ddd2;border-left:4px solid var(--c)}
+.sim-ms-steps li[aria-current] button{background:#faf6ef;box-shadow:0 0 0 2px var(--c) inset}
+.sim-ms-steps span{color:#5f6672;font-size:12px}
+.sim-ms-ref{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.sim-ms-ref input{width:70px}
+.sim-ms-out{background:#f3f7f6;border-radius:10px;padding:10px 12px;line-height:1.6}.sim-warn{color:#b4521c}
+.sim-ms-tip{font-size:12px}
+@media (max-width:760px){.sim-ms{grid-template-columns:1fr;grid-template-rows:minmax(200px,55%) 1fr;inset:8px}}
 .sim-we{position:absolute;top:40px;right:14px;z-index:5;width:min(360px,calc(100% - 28px));max-height:calc(100% - 54px);overflow:auto;background:#fff;border-radius:12px;box-shadow:0 8px 28px rgba(27,42,65,.22);padding:10px 12px;font-size:12.5px;display:grid;gap:8px}
 .sim-we-head{display:flex;align-items:center;gap:6px;cursor:move;user-select:none}.sim-we-head button{margin-left:auto;cursor:pointer}
 .sim-we-tools{display:flex;flex-wrap:wrap;gap:4px;align-items:center}.sim-we-tools button{font-size:12px}
@@ -573,6 +856,11 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
 .sim-we-svg .ctl{fill:#e07a2f;cursor:move}
 .sim-we-svg .len{fill:#4a5363;text-anchor:middle;dominant-baseline:middle;paint-order:stroke;stroke:#fbfaf6;stroke-width:3px;vector-effect:non-scaling-stroke}
 .sim-we-hint{margin:0;color:#5f6672;line-height:1.5}
+.sim-photo-result{margin-top:10px;padding:10px 12px;border:1px solid rgba(0,0,0,.08);border-radius:10px;display:grid;gap:8px;font-size:13px}
+.sim-photo-result p{margin:0;font-size:12px;line-height:1.5}
+.sim-sws{display:flex;flex-wrap:wrap;gap:6px 12px}.sim-sw{display:inline-flex;align-items:center;gap:5px;font-size:12px}
+.sim-sw i{width:18px;height:18px;border-radius:5px;border:1px solid rgba(0,0,0,.15);display:inline-block}
+.sim-check{display:inline-flex;gap:6px;align-items:center;font-weight:600}
 .studio-canvas .sim-canvas:active{cursor:grabbing}.studio-canvas .sim-canvas:focus-visible{box-shadow:inset 0 0 0 3px #e07a2f}
 .pill.sim-real{background:#dff1ec;color:#17705f}.pill.sim-sample{background:#fdebd9;color:#a8541b}
 .sim-flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px;margin:4px 0 12px}
@@ -612,15 +900,15 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
       <div class="studio-grid"><div class="studio-main">
         <section class="panel" aria-label="책상 배치 미리보기"><div class="panel-heading"><h2>${D.escape(state.name)}</h2><div class="studio-tools"><span class="pill purple">3D 배치</span><button id="reset-layout">초기화</button></div></div>
           <div class="sim-flow" aria-label="진행 단계">${flow}<span class="sim-push">${TAG.real} 실제 계산 ${TAG.sample} 시연용 가정</span></div>
-          <div class="studio-canvas"><span class="studio-canvas-label">${D.icon('cube').replace('class="icon"', 'class="icon" style="width:12px;height:12px;display:inline;vertical-align:middle;margin-right:4px"')} 3D 미리보기 · 실측 비율 (구현) · 제품 모양 단순화 (샘플)</span><div class="sim-viewport"><canvas class="sim-canvas" tabindex="0" aria-label="책상과 제품 3D 배치 화면. 제품을 끌어 옮기고 빈 곳을 끌어 시점을 돌립니다. 제품을 고른 뒤 방향키로 이동, R 키로 회전합니다. 벽을 클릭하면 벽 도면 창이 열립니다."></canvas>${ui.wallEdit ? editorHTML() : ''}<button type="button" class="sim-big-btn" aria-pressed="false">⤢ 크게 보기</button><div class="sim-big-info"><span>책상 ${state.width} × ${state.depth} × ${R.height} cm</span><span>빈 곳 드래그: 시점 회전 · 휠: 확대</span><span>제품 드래그: 이동 · R: 회전</span><span>벽 클릭: 벽 도면</span></div></div><div class="sim-backdrop" aria-hidden="true"></div><div class="studio-canvas-bottom"><span class="studio-dim">책상 ${state.width} × ${state.depth} × ${R.height} cm</span><div class="studio-style-switch" aria-label="스타일 선택">${[['warm', '내추럴'], ['minimal', '미니멀'], ['creative', '크리에이티브']].map(([key, label]) => `<button data-style="${key}" aria-pressed="${state.style === key}">${label}</button>`).join('')}</div></div></div>
-          <form class="studio-config" id="dimensions"><label>책상 너비 (cm)<input type="number" name="width" value="${state.width}" min="80" max="240" required></label><label>책상 깊이 (cm)<input type="number" name="depth" value="${state.depth}" min="40" max="120" required></label><label>책상 높이 (cm)<input type="number" name="height" value="${R.height}" min="60" max="110" required></label><label>책상~뒷벽 (cm)<input type="number" name="backGap" value="${R.backGap}" min="0" max="80" required></label><label>책상~옆벽 (cm)<input type="number" name="sideGap" value="${R.sideGap}" min="0" max="100" required></label><label>창문<select name="window">${[['none', '없음'], ['back', '뒷벽'], ['left', '왼쪽 벽'], ['right', '오른쪽 벽']].map(([k, l]) => `<option value="${k}" ${R.window === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label><div class="sim-walls">${wallOpt('backWall', '뒷벽')}${wallOpt('leftWall', '왼쪽 벽')}${wallOpt('rightWall', '오른쪽 벽')}</div><button type="submit">조건 적용</button><span class="muted">${ui.estimated ? '사진 추정 예시값이 들어가 있습니다 (샘플)<br>실제로 잰 값으로 고쳐 주세요' : '입력값이 3D에 실측 비율로 반영됩니다 (구현)<br>제품 깊이·높이는 가정값 (샘플)'}${Object.keys(R.paths).length ? '<br>도면을 그린 벽은 거리 입력값 대신 도면을 따릅니다' : ''}</span></form>
+          <div class="studio-canvas"><span class="studio-canvas-label">${D.icon('cube').replace('class="icon"', 'class="icon" style="width:12px;height:12px;display:inline;vertical-align:middle;margin-right:4px"')} 3D 미리보기 · 실측 비율 (구현) · 제품 모양 단순화 (샘플)${photoSourceText()}</span><div class="sim-viewport"><canvas class="sim-canvas" tabindex="0" aria-label="책상과 제품 3D 배치 화면. 좌클릭으로 빈 곳을 끌면 카메라가 이동하고, 우클릭으로 끌면 시점이 돌아갑니다. 휠로 앞뒤로 움직이고, F 키로 선택한 제품을 봅니다. 제품을 끌어 옮기거나, 고른 뒤 방향키로 이동하고 R 키로 회전합니다. 벽을 클릭하면 벽 도면 창이 열립니다."></canvas>${ui.wallEdit ? editorHTML() : ''}<button type="button" class="sim-big-btn" aria-pressed="false">⤢ 크게 보기</button><div class="sim-big-info"><span>책상 ${state.width} × ${state.depth} × ${R.height} cm</span><span>좌클릭 드래그: 카메라 이동</span><span>우클릭 드래그: 시점 회전 (누른 채 WASD·QE: 날기)</span><span>Alt+좌클릭: 대상 중심 회전</span><span>휠: 앞뒤 · F: 선택 제품 보기 · 더블클릭: 시점 처음으로</span><span>제품 드래그: 이동 · R: 회전</span><span>벽 클릭: 벽 도면</span></div><div class="sim-hint" aria-hidden="true">좌클릭 드래그 이동 · 우클릭 드래그 회전 · 휠 앞뒤 · 더블클릭 처음으로</div></div><div class="sim-backdrop" aria-hidden="true"></div><div class="studio-canvas-bottom"><span class="studio-dim">책상 ${state.width} × ${state.depth} × ${R.height} cm</span><div class="studio-style-switch" aria-label="스타일 선택">${[['warm', '내추럴'], ['minimal', '미니멀'], ['creative', '크리에이티브']].map(([key, label]) => `<button data-style="${key}" aria-pressed="${state.style === key}">${label}</button>`).join('')}</div></div></div>
+          <form class="studio-config" id="dimensions"><label>책상 너비 (cm)<input type="number" name="width" value="${state.width}" min="80" max="240" required></label><label>책상 깊이 (cm)<input type="number" name="depth" value="${state.depth}" min="40" max="120" required></label><label>책상 높이 (cm)<input type="number" name="height" value="${R.height}" min="60" max="110" required></label><label>책상~뒷벽 (cm)<input type="number" name="backGap" value="${R.backGap}" min="0" max="80" required></label><label>책상~옆벽 (cm)<input type="number" name="sideGap" value="${R.sideGap}" min="0" max="100" required></label><label>창문<select name="window">${[['none', '없음'], ['back', '뒷벽'], ['left', '왼쪽 벽'], ['right', '오른쪽 벽']].map(([k, l]) => `<option value="${k}" ${R.window === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label><div class="sim-walls">${wallOpt('backWall', '뒷벽')}${wallOpt('leftWall', '왼쪽 벽')}${wallOpt('rightWall', '오른쪽 벽')}</div><button type="submit">조건 적용</button><span class="muted">${ui.measured ? `사진에서 잰 값이 들어가 있습니다 (너비 약 ${ui.measured.width}cm${ui.measured.height ? `, 높이 약 ${ui.measured.height}cm` : ''})<br>원근 때문에 오차가 있을 수 있어요. 깊이는 직접 넣어 주세요` : '입력값이 3D에 실측 비율로 반영됩니다 (구현)<br>제품 깊이·높이는 가정값 (샘플)'}${Object.keys(R.paths).length ? '<br>도면을 그린 벽은 거리 입력값 대신 도면을 따릅니다' : ''}</span></form>
           <div class="sim-block" id="sim-checks">${checksHTML()}</div>
           <div class="sim-block" id="sim-selection">${selectionHTML()}</div>
           <div class="sim-block" id="sim-compare">${compareHTML()}</div>
         </section>
         <section class="panel"><div class="panel-heading"><h2>이 공간을 채운 제품 <span class="muted">${state.products.length}</span></h2><a class="muted" href="#products">전체 보기 ↗</a></div><div class="studio-products">${state.products.map(id => { const p = D.products.find(item => item.id === id); return `<article class="studio-item">${D.productArt(p)}<div><strong>${p.name}</strong><small>${D.money(p.price)}</small><a href="#products"> 제품 살펴보기</a></div></article>`; }).join('')}</div></section>
       </div><section class="panel assistant-panel" id="assistant" aria-label="AI 공간 어시스턴트"></section></div>
-      <section class="panel studio-upload"><div><label for="desk-photo">${D.icon('photo').replace('class="icon"', 'class="icon" style="display:inline;vertical-align:middle;margin-right:5px"')} 내 책상 사진<input id="desk-photo" type="file" accept="image/png,image/jpeg,image/webp" data-photo="desk"></label><p>PNG·JPG·WebP, 5MB 이하 · 이 탭에서만 미리 봅니다. (미리보기 구현)</p><div id="preview-desk">${photos.desk ? `<img class="studio-preview" src="${photos.desk}" alt="선택한 책상 사진">` : ''}</div><button type="button" id="sim-estimate" ${photos.desk ? '' : 'disabled'}>사진으로 책상 크기 추정 (샘플)</button></div><div><label for="style-photo">원하는 스타일 사진<input id="style-photo" type="file" accept="image/png,image/jpeg,image/webp" data-photo="style"></label><p>사진 분석·3D 변환은 이후 담당자가 연결할 영역입니다.</p><div id="preview-style">${photos.style ? `<img class="studio-preview" src="${photos.style}" alt="선택한 스타일 사진">` : ''}</div></div></section>`;
+      <section class="panel studio-upload"><div><label for="desk-photo">${D.icon('photo').replace('class="icon"', 'class="icon" style="display:inline;vertical-align:middle;margin-right:5px"')} 내 책상 사진<input id="desk-photo" type="file" accept="image/png,image/jpeg,image/webp" data-photo="desk"></label><p>PNG·JPG·WebP, 5MB 이하 · 이 탭에서만 미리 봅니다. (미리보기 구현)</p><div id="preview-desk">${photos.desk ? `<img class="studio-preview" src="${photos.desk}" alt="선택한 책상 사진">` : ''}</div><button type="button" id="sim-measure" ${photos.desk ? '' : 'disabled'}>📏 사진에서 책상 치수 재기 (구현)</button>${deskPhotoHTML()}</div><div><label for="style-photo">원하는 스타일 사진<input id="style-photo" type="file" accept="image/png,image/jpeg,image/webp" data-photo="style"></label><p>사진의 대표 색으로 3D 색을 바꿉니다. (색 분석 구현 · 가구 인식은 미연결)</p><div id="preview-style">${photos.style ? `<img class="studio-preview" src="${photos.style}" alt="선택한 스타일 사진">` : ''}</div>${stylePhotoHTML()}</div></section>`;
 
       D.assistant.mount(root.querySelector('#assistant'));
 
@@ -727,7 +1015,7 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
         D.state.width = num('width', 80, 240); D.state.depth = num('depth', 40, 120);
         r.height = num('height', 60, 110); r.backGap = num('backGap', 0, 80); r.sideGap = num('sideGap', 0, 100);
         r.window = form.get('window'); r.backWall = form.has('backWall'); r.leftWall = form.has('leftWall'); r.rightWall = form.has('rightWall');
-        ui.estimated = false; ui.ownChange = true; view.radius = 0;
+        ui.estimated = false; ui.measured = null; ui.ownChange = true; resetView();
         D.render();
         const n = checks().bad.size;
         D.toast(n ? `조건을 반영했습니다. 맞지 않는 제품 ${n}개를 확인하세요.` : '조건을 반영했습니다. 모든 제품이 책상 안에 있습니다.');
@@ -738,16 +1026,37 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
       });
       $('#reset-layout').addEventListener('click', () => {
         Object.assign(D.state, { name: '나의 첫 번째 데스크', style: 'warm', width: 140, depth: 70, products: ['monitor', 'lamp', 'keyboard'] });
-        delete D.state.room; delete D.state.layout; Object.assign(ui, { selected: null, before: null, estimated: false, wallEdit: null, wePos: null }); view.radius = 0; D.render();
+        delete D.state.room; delete D.state.layout; Object.assign(ui, { selected: null, before: null, estimated: false, measured: null, wallEdit: null, wePos: null }); measure = null; resetView(); D.render();
       });
       root.querySelectorAll('[data-photo]').forEach(input => input.addEventListener('change', () => {
         const file = input.files[0]; if (!file) return;
         if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) { input.value = ''; D.toast('5MB 이하의 PNG, JPG, WebP 이미지를 선택해 주세요.'); return; }
         const key = input.dataset.photo, url = URL.createObjectURL(file), img = new Image();
-        img.onload = () => { if (photos[key]) URL.revokeObjectURL(photos[key]); photos[key] = url; D.render(); if (key === 'desk') D.toast('사진을 불러왔습니다. 위 크기 입력에 실제 책상 치수를 넣어 주세요.'); };
+        img.onload = () => {
+          if (photos[key]) URL.revokeObjectURL(photos[key]); photos[key] = url;
+          const R = room();
+          if (key === 'desk') { measure = null; R.deskPhoto = analyzeDesk(img); D.render(); D.toast('책상 사진의 색을 3D 책상과 벽에 반영했습니다. \'사진에서 책상 치수 재기\'로 너비·높이도 잴 수 있습니다.'); }
+          else {
+            const prev = R.stylePhoto && R.stylePhoto.on ? R.stylePhoto.prevStyle : D.state.style;
+            R.stylePhoto = Object.assign(analyzeStyle(img), { on: true, prevStyle: prev }); D.state.style = R.stylePhoto.style;
+            D.render(); D.toast(`스타일 사진의 색으로 3D를 바꿨습니다. 가까운 스타일: ${STYLE_NAME[R.stylePhoto.style]}`);
+          }
+        };
         img.onerror = () => { URL.revokeObjectURL(url); input.value = ''; D.toast('이미지를 읽을 수 없습니다. 다른 파일을 선택해 주세요.'); };
         img.src = url;
       }));
+
+      root.querySelectorAll('[data-photo-use]').forEach(box => box.addEventListener('change', () => {
+        const R = room();
+        if (box.dataset.photoUse === 'desk') R.deskPhoto.on = box.checked;
+        else {
+          const P = R.stylePhoto; P.on = box.checked;
+          if (box.checked) { P.prevStyle = D.state.style; D.state.style = P.style; } else if (P.prevStyle) D.state.style = P.prevStyle;
+        }
+        D.render();
+      }));
+      // 스타일 버튼을 직접 누르면 스타일 사진 색 반영은 끕니다 (버튼이 우선)
+      root.querySelectorAll('[data-style]').forEach(button => button.addEventListener('click', () => { const P = room().stylePhoto; if (P) P.on = false; }, true));
 
       /* 추가 동작 (이벤트 위임: 부분 갱신된 버튼도 동작) */
       $('.studio-main').addEventListener('click', e => {
@@ -757,10 +1066,14 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
         if (t.id === 'sim-auto') { autoArrange(); refresh('moved'); D.toast('정해 둔 규칙으로 다시 배치했습니다. 변경 전·후에서 확인하세요.'); }
         if (t.id === 'sim-baseline') { ui.before = snapshot(); refresh('moved'); D.toast("지금 배치를 '변경 전'으로 잡았습니다."); }
       });
-      $('#sim-estimate').addEventListener('click', () => {
-        D.state.width = 120; D.state.depth = 60; ui.estimated = true; ui.ownChange = true; view.radius = 0;
-        D.render(); D.toast('예시 값(120×60cm)을 넣었습니다. 실제 사진 분석은 연결되지 않았습니다.');
-      });
+      $('#sim-measure').addEventListener('click', () => openMeasure(res => {
+        const r = room(), w = Math.min(240, Math.max(80, Math.round(res.width)));
+        D.state.width = w;
+        let h = null; if (res.height) { h = Math.min(110, Math.max(60, Math.round(res.height))); r.height = h; }
+        ui.measured = { width: w, height: h }; ui.ownChange = true; resetView();
+        D.render();
+        D.toast(`사진에서 잰 책상 너비 ${w}cm${h ? `, 높이 ${h}cm` : ''}를 3D에 반영했습니다.`);
+      }));
     }
   };
 })(window.Deskspace);
