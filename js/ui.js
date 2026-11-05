@@ -12,6 +12,7 @@
     keyboard: '<rect x="1" y="6" width="22" height="12" rx="2"/><path d="M4 10h2m3 0h2m3 0h2m3 0h1M5 14h2m3 0h9"/>',
     shelf: '<path d="M2 8h20v4H2zM5 12v8m14-8v8"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    chat: '<path d="M4 5h16v11H10l-6 4V5Z"/><path d="M8 9h8M8 12h5"/>',
     photo: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="2"/><path d="m3 17 6-6 4 4 3-3 5 5"/>'
   };
   D.icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.grid}</svg>`;
