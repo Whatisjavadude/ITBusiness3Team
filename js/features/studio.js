@@ -21,8 +21,8 @@
   const photos = { desk: '', style: '' };
   const ui = { selected: null, before: null, estimated: false, measured: null, ownChange: false, big: false, wallEdit: null, wallTool: 'line', wePos: null };
   // 카메라: target(바라보는 점) + 방향(theta·phi) + 거리(radius). target이 null이면 책상 가운데를 봅니다.
-  const view = { theta: -0.6, phi: 0.5, radius: 0, target: null };
-  const resetView = () => Object.assign(view, { theta: -0.6, phi: 0.5, radius: 0, target: null });
+  const view = { theta: 0, phi: 0.24, radius: 0, target: null };
+  const resetView = () => Object.assign(view, { theta: 0, phi: 0.24, radius: 0, target: null });
   let observer = null;
 
   /* ---------- 제품 치수 ----------
@@ -224,8 +224,8 @@
     };
     function camera() {
       const H = room().height;
-      if (!view.radius) { view.radius = Math.max(D.state.width, D.state.depth * 1.6) * 1.5 + 60; view.target = null; }
-      const T = view.target || v3(0, H - 6, 0), cp = Math.cos(view.phi);
+      if (!view.radius) { view.radius = Math.max(D.state.width, D.state.depth * 1.6) * 0.84; view.target = null; } // 처음 시점: 정면에서 살짝 내려다보며 책상이 화면을 넓게 채우도록 (책상 140cm → 거리 약 118cm) // 처음 시점: 정면에서 살짝 내려다보며 책상이 화면 가운데 아래쪽을 채우도록
+      const T = view.target || v3(0, H + 24, 0), cp = Math.cos(view.phi);
       const E = add(T, mul(v3(cp * Math.sin(view.theta), Math.sin(view.phi), cp * Math.cos(view.theta)), view.radius));
       const f = norm(sub(T, E)), right = norm(cross(f, v3(0, 1, 0)));
       sim.focal = sim.h / (2 * Math.tan(0.42));
@@ -394,7 +394,7 @@
     const pt = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
     const grabY = id => room().height + baseY(id, layout()) + spec(id).h / 2;
     const offset = () => { const cp = Math.cos(view.phi); return v3(cp * Math.sin(view.theta), Math.sin(view.phi), cp * Math.cos(view.theta)); };
-    const target = () => view.target || v3(0, room().height - 6, 0);
+    const target = () => view.target || v3(0, room().height + 24, 0);
     const clampPitch = v => Math.min(1.45, Math.max(-0.35, v));
     const keepAboveFloor = () => { const E = add(target(), mul(offset(), view.radius)); if (E.y < 8) view.target = v3(target().x, target().y + (8 - E.y), target().z); };
     function pan(dx, dy) { // 화면 픽셀만큼 카메라와 바라보는 점을 함께 옮깁니다
@@ -572,16 +572,56 @@
     if (preview) o += `<path d="${preview}" class="pre"/>`;
     return o;
   }
+  const HINT_DRAW = `빈 곳을 클릭하면 끝점에서 선이 이어집니다. ● 점과 ◆ 곡선 손잡이는 끌어 옮길 수 있습니다. 5cm 단위로 맞춰지고, 직선은 수평·수직에 가까우면 반듯하게 붙습니다. 다른 벽과 겹치면 겹친 벽이 지워집니다.`;
   function editorHTML() {
-    const key = ui.wallEdit, path = wallPath(key), pos = ui.wePos ? `left:${ui.wePos.x}px;top:${ui.wePos.y}px;right:auto` : '';
-    const hint = !path.start ? '벽이 시작할 점을 도면에서 클릭하세요.'
-      : `클릭하면 끝점에서 <b>${ui.wallTool === 'line' ? '직선' : '곡선'}</b>이 이어집니다. ● 점과 ◆ 곡선 손잡이는 끌어 옮길 수 있습니다. 5cm 단위로 맞춰지고, 직선은 수평·수직에 가까우면 반듯하게 붙습니다.`;
+    const key = ui.wallEdit, R = room(), path = wallPath(key), pos = ui.wePos ? `left:${ui.wePos.x}px;top:${ui.wePos.y}px;right:auto` : '';
+    const hint = !path.start ? '벽이 시작할 점을 도면에서 클릭하거나, 아래 숫자 입력으로 바로 추가하세요.' : HINT_DRAW;
+    // 벽 목록: 이름을 누르면 그 벽을 편집, ✕로 그 벽만 지우기, 지운 벽은 다시 세우기
+    const wallsRow = Object.keys(WALLS).map(k => R[WALL_FLAG[k]]
+      ? `<span class="sim-we-chip${k === key ? ' on' : ''}"><button type="button" data-wsel="${k}" aria-pressed="${k === key}">${WALLS[k]}${R.paths[k] ? ' ✎' : ''}</button><button type="button" data-wdel="${k}" aria-label="${WALLS[k]} 지우기" title="${WALLS[k]} 지우기">✕</button></span>`
+      : `<button type="button" class="sim-we-add" data-wadd="${k}">+ ${WALLS[k]} 세우기</button>`).join('');
+    const dirs = [['0', '→ 오른쪽'], ['90', '↓ 앞쪽'], ['180', '← 왼쪽'], ['270', '↑ 뒤쪽'], ['custom', '각도 입력']];
     return `<div class="sim-we" role="dialog" aria-label="${WALLS[key]} 도면 그리기" style="${pos}">
       <div class="sim-we-head" data-we="move"><strong>${WALLS[key]} 도면</strong>${TAG.real}<span class="muted">위에서 본 모습</span><button type="button" data-we="close" aria-label="도면 창 닫기">✕</button></div>
-      <div class="sim-we-tools"><span role="group" aria-label="그리기 도구"><button type="button" data-tool="line" aria-pressed="${ui.wallTool === 'line'}">╱ 직선</button><button type="button" data-tool="curve" aria-pressed="${ui.wallTool === 'curve'}">◠ 곡선</button></span><span class="sim-push"></span><button type="button" data-we="undo">되돌리기</button><button type="button" data-we="clear">새로 그리기</button><button type="button" data-we="straight">기본 직선 벽</button></div>
+      <div class="sim-we-walls" role="group" aria-label="벽 목록">${wallsRow}</div>
+      <div class="sim-we-tools"><span role="group" aria-label="그리기 도구"><button type="button" data-tool="line" aria-pressed="${ui.wallTool === 'line'}">╱ 직선</button><button type="button" data-tool="curve" aria-pressed="${ui.wallTool === 'curve'}">◠ 곡선</button></span><span class="sim-push"></span><button type="button" data-we="undo" title="내가 그린 마지막 선 지우기 (처음 벽은 지워지지 않음)">되돌리기</button><button type="button" data-we="clear">새로 그리기</button></div>
+      <div class="sim-we-tools"><span class="muted">초기화</span><button type="button" data-we="straight" title="이 벽만 처음 직선 벽으로">이 벽</button><button type="button" data-we="resetall" title="세 벽 모두 처음 상태로 (책상·제품은 그대로)">모든 벽</button></div>
       <svg class="sim-we-svg" role="img" aria-label="${WALLS[key]} 도면 편집 영역"></svg>
+      <form class="sim-we-num" aria-label="직선 벽 숫자로 추가"><strong>직선 숫자로 추가</strong>
+        <label>길이 <input type="number" name="len" min="5" max="1000" step="1" value="${ui.weLen || 100}" required> cm</label>
+        <label>방향 <select name="dir">${dirs.map(([v, l]) => `<option value="${v}" ${String(ui.weDir || '0') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="sim-we-ang" ${String(ui.weDir || '0') === 'custom' ? '' : 'hidden'}>각도 <input type="number" name="ang" min="-360" max="360" step="1" value="${ui.weAng || 45}"> °</label>
+        <button type="submit">추가</button>
+        <small class="muted">끝점에서 이어집니다 · 각도는 0° = 오른쪽, 90° = 앞쪽(책상 쪽)</small>
+      </form>
       <p class="sim-we-hint">${hint}</p></div>`;
   }
+
+  /* 벽 겹침 [구현]: 새로 그린 벽(key)이 다른 벽을 가로지르거나 같은 선 위에서 겹치면, 겹친 기존 벽을 지웁니다.
+   * 끝점끼리 맞닿거나(코너) 끝점이 다른 벽에 붙는 것(T자)은 겹침으로 보지 않습니다. */
+  function segOverlap(a, b, c, d) {
+    const r = { x: b.x - a.x, z: b.z - a.z }, q = { x: d.x - c.x, z: d.z - c.z };
+    const lr = Math.hypot(r.x, r.z), lq = Math.hypot(q.x, q.z); if (lr < 0.5 || lq < 0.5) return false;
+    const cr = (u, v) => u.x * v.z - u.z * v.x, ca = { x: c.x - a.x, z: c.z - a.z }, den = cr(r, q);
+    if (Math.abs(den) > 1e-9 * lr * lq) { // 가로지름: 두 선 모두의 안쪽(끝점에서 1.5cm 이상)에서 만날 때만
+      const t = cr(ca, q) / den, u = cr(ca, r) / den, et = 1.5 / lr, eu = 1.5 / lq;
+      return t > et && t < 1 - et && u > eu && u < 1 - eu;
+    }
+    if (Math.abs(cr(ca, r)) / lr > 1) return false; // 평행하지만 다른 선
+    const t0 = (ca.x * r.x + ca.z * r.z) / (lr * lr), t1 = ((d.x - a.x) * r.x + (d.z - a.z) * r.z) / (lr * lr);
+    return (Math.min(1, Math.max(t0, t1)) - Math.max(0, Math.min(t0, t1))) * lr > 3; // 같은 선 위에서 3cm 넘게 겹침
+  }
+  function overlappingWalls(key) {
+    const all = walls(), me = all.find(w => w.key === key); if (!me) return [];
+    return all.filter(w => w.key !== key && w.pts.some((p, i) => i && me.pts.some((m, j) => j && segOverlap(me.pts[j - 1], m, w.pts[i - 1], p)))).map(w => w.key);
+  }
+  function resolveOverlaps(key) {
+    const gone = overlappingWalls(key), R = room(); // room()은 부를 때마다 새 객체를 만들므로 겹침 계산 뒤에 잡습니다
+    gone.forEach(k => { R[WALL_FLAG[k]] = false; delete R.paths[k]; });
+    if (gone.length) D.toast(`${gone.map(k => WALLS[k]).join(', ')}이 방금 그린 ${WALLS[key]}과 겹쳐서 지웠습니다.`);
+    return gone.length > 0;
+  }
+
 
   /* ---------- 사진 → 3D 반영 [구현] ----------
    * 외부 AI 없이 브라우저 안에서 사진의 픽셀 색만 분석합니다. (사진은 서버로 보내지 않음)
@@ -808,12 +848,17 @@
     if (document.getElementById('sim-style')) return;
     const el = document.createElement('style'); el.id = 'sim-style';
     el.textContent = `
-.studio-canvas .sim-viewport{position:relative;width:100%;max-width:100%;margin-inline:auto;aspect-ratio:700/490;min-height:220px;border-radius:inherit}
+.studio-canvas .sim-viewport{position:relative;width:100%;max-width:100%;height:100%;margin-inline:auto;min-height:220px;border-radius:inherit} /* .studio-canvas(팀 CSS 높이 405px) 칸을 꽉 채움 */
 .studio-canvas .sim-canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none;outline:none;border-radius:inherit}
 .sim-big-btn{position:absolute;top:10px;right:10px;z-index:4;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:6px 10px;border-radius:8px;border:1px solid rgba(27,42,65,.18);background:rgba(255,255,255,.92);color:#1b2a41;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.sim-we button{min-height:28px;padding:4px 9px;font-size:11px;border-radius:7px}.sim-we .sim-we-chip button{min-height:24px;border-radius:0}.sim-we .sim-we-add{min-height:24px;border-radius:999px}
+.sim-ms button{min-height:30px;padding:5px 10px;font-size:12px}
+#sim-measure{min-height:30px;padding:5px 11px;font-size:11px;margin-top:10px}
+.sim-big-btn{min-height:30px}
 .sim-big-btn:hover{background:#fff;border-color:#e07a2f}.sim-big-btn kbd{font:inherit;font-size:11px;padding:0 5px;border-radius:4px;background:#eef0f3;border:1px solid #d6dbe1}
 .sim-big-info{display:none}
-.sim-hint{position:absolute;left:10px;bottom:8px;z-index:3;font-size:11px;color:#34404b;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:6px;pointer-events:none}
+.studio-canvas .studio-canvas-label{display:none}
+.sim-hint{position:absolute;left:10px;top:10px;z-index:3;font-size:11px;color:#34404b;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:6px;pointer-events:none}
 .sim-viewport.big .sim-hint{display:none}
 .sim-backdrop{display:none}
 html.sim-lock,html.sim-lock body{overflow:hidden}
@@ -855,6 +900,18 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
 .sim-we-svg .pt{fill:#fff;stroke:#e07a2f;stroke-width:2;vector-effect:non-scaling-stroke;cursor:move}.sim-we-svg .pt.start{fill:#1b2a41;stroke:#1b2a41}
 .sim-we-svg .ctl{fill:#e07a2f;cursor:move}
 .sim-we-svg .len{fill:#4a5363;text-anchor:middle;dominant-baseline:middle;paint-order:stroke;stroke:#fbfaf6;stroke-width:3px;vector-effect:non-scaling-stroke}
+.sim-we-walls{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.sim-we-chip{display:inline-flex;border:1px solid #d6cfc2;border-radius:999px;overflow:hidden}.sim-we-chip.on{border-color:#e07a2f}
+.sim-we-chip button{border:0;border-radius:0;background:#fff;font-size:12px;padding:3px 8px;cursor:pointer}.sim-we-chip.on button[data-wsel]{background:#1b2a41;color:#fff}
+.sim-we-chip button[data-wdel]{padding:3px 7px;color:#b4462f;border-left:1px solid #e3ddd2}.sim-we-chip button[data-wdel]:hover{background:#fdecea}
+.sim-we-add{font-size:12px;border:1px dashed #b9b1a3;border-radius:999px;background:#faf8f3;padding:3px 9px;cursor:pointer}
+.sim-we-num{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;background:#faf8f3;border:1px solid #ece6db;border-radius:8px;padding:7px 9px}
+.sim-we-num strong{font-size:12px;width:100%}.sim-we-num label{display:inline-flex;align-items:center;gap:4px;font-size:12px}
+.sim-we-num input[type=number]{width:64px}.sim-we-num small{width:100%;font-size:11px}
+.panel-heading .studio-tools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
+.studio-tools .btn,.studio-tools #save-layout{white-space:nowrap}
+.studio-tools .btn,.studio-tools #save-layout{display:inline-flex;align-items:center;gap:5px;min-height:27px;padding:4px 9px;font-size:10px}.studio-tools svg{width:13px;height:13px;flex:none}
+.sim-we-num [hidden]{display:none}
 .sim-we-hint{margin:0;color:#5f6672;line-height:1.5}
 .sim-photo-result{margin-top:10px;padding:10px 12px;border:1px solid rgba(0,0,0,.08);border-radius:10px;display:grid;gap:8px;font-size:13px}
 .sim-photo-result p{margin:0;font-size:12px;line-height:1.5}
@@ -863,9 +920,8 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
 .sim-check{display:inline-flex;gap:6px;align-items:center;font-weight:600}
 .studio-canvas .sim-canvas:active{cursor:grabbing}.studio-canvas .sim-canvas:focus-visible{box-shadow:inset 0 0 0 3px #e07a2f}
 .pill.sim-real{background:#dff1ec;color:#17705f}.pill.sim-sample{background:#fdebd9;color:#a8541b}
-.sim-flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px;margin:4px 0 12px}
-.sim-flow span[aria-current]{font-weight:700}
-.sim-block{margin-top:12px;padding-top:12px;border-top:1px solid rgba(0,0,0,.08);display:grid;gap:8px;font-size:13px}
+.sim-block{margin:0;padding:14px 18px;border-top:1px solid var(--color-line,rgba(0,0,0,.08));display:grid;gap:8px;font-size:12px}
+.sim-block button{min-height:30px;padding:5px 10px;font-size:11px}.sim-block .sim-chips button{font-weight:500}
 .sim-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.sim-push{margin-left:auto}
 .sim-list{list-style:none;margin:0;padding:0;display:grid;gap:4px}
 .sim-list li button{all:unset;cursor:pointer}.sim-list:not(.plain) li::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:middle}
@@ -878,7 +934,8 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
 .sim-compare .item-after{fill:rgba(31,138,138,.5);stroke:#1f8a8a;stroke-width:.6}.sim-compare .item-after.bad{fill:rgba(224,72,62,.5);stroke:#e0483e}
 .sim-compare .move{stroke:#e07a2f;stroke-width:.8;stroke-dasharray:2 1.2}
 .studio-config .sim-walls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-.studio-config .sim-walls label{display:inline-flex;gap:4px;align-items:center;font-size:13px}
+.studio-config .sim-walls label{display:inline-flex;gap:5px;align-items:center;font-size:11px;color:var(--color-text,#20242c)}
+.studio-config .sim-walls input{width:auto;padding:0;margin:0}
 @media (max-width:640px){.sim-compare{grid-template-columns:1fr}}`;
     document.head.appendChild(el);
   }
@@ -891,17 +948,15 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
       const state = D.state, R = room(); layout();
       if (!ui.before) ui.before = snapshot();
       if (ui.selected && !state.products.includes(ui.selected)) ui.selected = null;
-      const step = photos.desk ? (JSON.stringify(snapshot().layout) !== JSON.stringify(ui.before.layout) || state.width !== ui.before.width || state.depth !== ui.before.depth ? 3 : 2) : 1;
-      const flow = ['사진 입력', '벽면·책상 조건', '배치 변화'].map((n, i) => `<span ${step === i + 1 ? 'aria-current="step"' : ''}>${i + 1}. ${n}</span>`).join('<span class="muted">→</span>');
       const wallOpt = (k, l) => `<label><input type="checkbox" name="${k}" ${R[k] ? 'checked' : ''}> ${l}</label>`;
 
       // 기존 화면 구조 유지 · 바뀐 곳: 캔버스 내용, 라벨 문구, 크기 폼 항목 추가, 패널 아래 점검/변화 영역, 사진 영역 추정 버튼
-      root.innerHTML = D.heading('YOUR SPACE, YOUR WAY', '나다운 공간을 만들어보세요', '책상을 꾸미고, 대화로 다듬고, 나에게 맞는 구성을 찾아보세요.', `<a class="btn" href="#presets">${D.icon('grid')} 프리셋 불러오기</a><button class="primary" id="save-layout">${D.icon('save')} 구성 저장</button>`) + `
+      // 상단 제목 영역(YOUR SPACE, YOUR WAY …)은 없애고, 그 자리의 프리셋 불러오기·구성 저장 버튼은 책상 패널 제목 줄로 옮겼습니다.
+      root.innerHTML = `
       <div class="studio-grid"><div class="studio-main">
-        <section class="panel" aria-label="책상 배치 미리보기"><div class="panel-heading"><h2>${D.escape(state.name)}</h2><div class="studio-tools"><span class="pill purple">3D 배치</span><button id="reset-layout">초기화</button></div></div>
-          <div class="sim-flow" aria-label="진행 단계">${flow}<span class="sim-push">${TAG.real} 실제 계산 ${TAG.sample} 시연용 가정</span></div>
+        <section class="panel" aria-label="책상 배치 미리보기"><div class="panel-heading"><h2>${D.escape(state.name)}</h2><div class="studio-tools"><span class="pill purple">3D 배치</span><button id="reset-layout">초기화</button><a class="btn" href="#presets">${D.icon('grid')} 프리셋 불러오기</a><button class="primary" id="save-layout">${D.icon('save')} 구성 저장</button></div></div>
           <div class="studio-canvas"><span class="studio-canvas-label">${D.icon('cube').replace('class="icon"', 'class="icon" style="width:12px;height:12px;display:inline;vertical-align:middle;margin-right:4px"')} 3D 미리보기 · 실측 비율 (구현) · 제품 모양 단순화 (샘플)${photoSourceText()}</span><div class="sim-viewport"><canvas class="sim-canvas" tabindex="0" aria-label="책상과 제품 3D 배치 화면. 좌클릭으로 빈 곳을 끌면 카메라가 이동하고, 우클릭으로 끌면 시점이 돌아갑니다. 휠로 앞뒤로 움직이고, F 키로 선택한 제품을 봅니다. 제품을 끌어 옮기거나, 고른 뒤 방향키로 이동하고 R 키로 회전합니다. 벽을 클릭하면 벽 도면 창이 열립니다."></canvas>${ui.wallEdit ? editorHTML() : ''}<button type="button" class="sim-big-btn" aria-pressed="false">⤢ 크게 보기</button><div class="sim-big-info"><span>책상 ${state.width} × ${state.depth} × ${R.height} cm</span><span>좌클릭 드래그: 카메라 이동</span><span>우클릭 드래그: 시점 회전 (누른 채 WASD·QE: 날기)</span><span>Alt+좌클릭: 대상 중심 회전</span><span>휠: 앞뒤 · F: 선택 제품 보기 · 더블클릭: 시점 처음으로</span><span>제품 드래그: 이동 · R: 회전</span><span>벽 클릭: 벽 도면</span></div><div class="sim-hint" aria-hidden="true">좌클릭 드래그 이동 · 우클릭 드래그 회전 · 휠 앞뒤 · 더블클릭 처음으로</div></div><div class="sim-backdrop" aria-hidden="true"></div><div class="studio-canvas-bottom"><span class="studio-dim">책상 ${state.width} × ${state.depth} × ${R.height} cm</span><div class="studio-style-switch" aria-label="스타일 선택">${[['warm', '내추럴'], ['minimal', '미니멀'], ['creative', '크리에이티브']].map(([key, label]) => `<button data-style="${key}" aria-pressed="${state.style === key}">${label}</button>`).join('')}</div></div></div>
-          <form class="studio-config" id="dimensions"><label>책상 너비 (cm)<input type="number" name="width" value="${state.width}" min="80" max="240" required></label><label>책상 깊이 (cm)<input type="number" name="depth" value="${state.depth}" min="40" max="120" required></label><label>책상 높이 (cm)<input type="number" name="height" value="${R.height}" min="60" max="110" required></label><label>책상~뒷벽 (cm)<input type="number" name="backGap" value="${R.backGap}" min="0" max="80" required></label><label>책상~옆벽 (cm)<input type="number" name="sideGap" value="${R.sideGap}" min="0" max="100" required></label><label>창문<select name="window">${[['none', '없음'], ['back', '뒷벽'], ['left', '왼쪽 벽'], ['right', '오른쪽 벽']].map(([k, l]) => `<option value="${k}" ${R.window === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label><div class="sim-walls">${wallOpt('backWall', '뒷벽')}${wallOpt('leftWall', '왼쪽 벽')}${wallOpt('rightWall', '오른쪽 벽')}</div><button type="submit">조건 적용</button><span class="muted">${ui.measured ? `사진에서 잰 값이 들어가 있습니다 (너비 약 ${ui.measured.width}cm${ui.measured.height ? `, 높이 약 ${ui.measured.height}cm` : ''})<br>원근 때문에 오차가 있을 수 있어요. 깊이는 직접 넣어 주세요` : '입력값이 3D에 실측 비율로 반영됩니다 (구현)<br>제품 깊이·높이는 가정값 (샘플)'}${Object.keys(R.paths).length ? '<br>도면을 그린 벽은 거리 입력값 대신 도면을 따릅니다' : ''}</span></form>
+          <form class="studio-config" id="dimensions"><label>책상 너비 (cm)<input type="number" name="width" value="${state.width}" min="80" max="240" required></label><label>책상 깊이 (cm)<input type="number" name="depth" value="${state.depth}" min="40" max="120" required></label><label>책상 높이 (cm)<input type="number" name="height" value="${R.height}" min="60" max="110" required></label><label>책상~뒷벽 (cm)<input type="number" name="backGap" value="${R.backGap}" min="0" max="80" required></label><label>책상~옆벽 (cm)<input type="number" name="sideGap" value="${R.sideGap}" min="0" max="100" required></label><label>창문<select name="window">${[['none', '없음'], ['back', '뒷벽'], ['left', '왼쪽 벽'], ['right', '오른쪽 벽']].map(([k, l]) => `<option value="${k}" ${R.window === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label><div class="sim-walls">${wallOpt('backWall', '뒷벽')}${wallOpt('leftWall', '왼쪽 벽')}${wallOpt('rightWall', '오른쪽 벽')}</div><button type="submit">조건 적용</button>${(() => { const note = [ui.measured ? `사진에서 잰 값이 들어가 있습니다 (너비 약 ${ui.measured.width}cm${ui.measured.height ? `, 높이 약 ${ui.measured.height}cm` : ''})<br>원근 때문에 오차가 있을 수 있어요. 깊이는 직접 넣어 주세요` : '', Object.keys(R.paths).length ? '도면을 그린 벽은 거리 입력값 대신 도면을 따릅니다' : ''].filter(Boolean).join('<br>'); return note ? `<span class="muted">${note}</span>` : ''; })()}</form>
           <div class="sim-block" id="sim-checks">${checksHTML()}</div>
           <div class="sim-block" id="sim-selection">${selectionHTML()}</div>
           <div class="sim-block" id="sim-compare">${compareHTML()}</div>
@@ -939,14 +994,18 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
       if (we) {
         const key = ui.wallEdit, svg = we.querySelector('.sim-we-svg');
         let vb = editorBounds(key), drag = null, down = null;
-        const own = () => { const R = room(); if (!R.paths[key]) R.paths[key] = JSON.parse(JSON.stringify(defaultPath(key))); return R.paths[key]; };
+        const own = () => { const R = room(); if (!R.paths[key]) { const d = JSON.parse(JSON.stringify(defaultPath(key))); d.base = d.segs.length; R.paths[key] = d; } return R.paths[key]; }; // base = 처음 벽의 선 개수 (되돌리기로 지우지 않음)
         const toPt = e => { const q = svg.createSVGPoint(); q.x = e.clientX; q.y = e.clientY; const m = q.matrixTransform(svg.getScreenCTM().inverse()); return { x: snap(m.x), z: snap(m.y) }; };
         // 직선은 수평·수직에서 8° 안쪽이면 딱 맞춰 반듯한 코너를 만들기 쉽게 합니다.
         const straighten = (a, q) => { if (ui.wallTool !== 'line') return q; const dx = Math.abs(q.x - a.x), dz = Math.abs(q.z - a.z); if (dz < dx * 0.14) return { x: q.x, z: a.z }; if (dx < dz * 0.14) return { x: a.x, z: q.z }; return q; };
         const curveCtl = (a, b) => ({ x: snap((a.x + b.x) / 2 - (b.z - a.z) * 0.3), z: snap((a.z + b.z) / 2 + (b.x - a.x) * 0.3) });
         const draw = preview => { svg.setAttribute('viewBox', `${vb.x} ${vb.z} ${vb.w} ${vb.h}`); svg.innerHTML = editorSVG(key, vb, preview); };
-        const hint = () => { we.querySelector('.sim-we-hint').innerHTML = !wallPath(key).start ? '벽이 시작할 점을 도면에서 클릭하세요.' : `클릭하면 끝점에서 <b>${ui.wallTool === 'line' ? '직선' : '곡선'}</b>이 이어집니다. ● 점과 ◆ 곡선 손잡이는 끌어 옮길 수 있습니다. 5cm 단위로 맞춰지고, 직선은 수평·수직에 가까우면 반듯하게 붙습니다.`; };
-        const changed = final => { sim.draw(); refresh(final ? 'moved' : 'move'); if (final) { vb = editorBounds(key); } draw(); hint(); };
+        const hint = () => { we.querySelector('.sim-we-hint').innerHTML = !wallPath(key).start ? '벽이 시작할 점을 도면에서 클릭하거나, 아래 숫자 입력으로 바로 추가하세요.' : HINT_DRAW; };
+        const changed = final => {
+          // 다 그린 순간(놓았을 때) 다른 벽과 겹치면 기존 벽을 지우고 알림 → 화면을 다시 그려 체크박스·벽 목록도 맞춥니다
+          if (final && resolveOverlaps(key)) { D.render(); return; }
+          sim.draw(); refresh(final ? 'moved' : 'move'); if (final) { vb = editorBounds(key); } draw(); hint();
+        };
         draw();
         svg.addEventListener('pointerdown', e => {
           svg.setPointerCapture(e.pointerId);
@@ -989,10 +1048,48 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
           if (t.dataset.tool) { ui.wallTool = t.dataset.tool; we.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', b === t)); hint(); return; }
           const R = room();
           if (t.dataset.we === 'close') { ui.wallEdit = null; D.render(); return; }
-          if (t.dataset.we === 'undo') { const path = own(); if (path.segs.length) path.segs.pop(); else path.start = null; }
-          if (t.dataset.we === 'clear') { R.paths[key] = { start: null, segs: [] }; D.toast(`${WALLS[key]}을 지웠습니다. 시작점을 클릭해 새로 그리세요.`); }
-          if (t.dataset.we === 'straight') { delete R.paths[key]; D.toast(`${WALLS[key]}을 기본 직선 벽으로 되돌렸습니다.`); }
+          if (t.dataset.wsel) { ui.wallEdit = t.dataset.wsel; D.render(); return; }
+          if (t.dataset.wadd) { R[WALL_FLAG[t.dataset.wadd]] = true; ui.wallEdit = t.dataset.wadd; D.render(); if (resolveOverlaps(t.dataset.wadd)) D.render(); else D.toast(`${WALLS[t.dataset.wadd]}을 세웠습니다.`); return; }
+          if (t.dataset.wdel) {
+            const k = t.dataset.wdel; R[WALL_FLAG[k]] = false; delete R.paths[k];
+            if (k === key) ui.wallEdit = Object.keys(WALLS).find(o => R[WALL_FLAG[o]]) || null;
+            D.render(); D.toast(`${WALLS[k]}을 지웠습니다. 벽 목록의 '+ ${WALLS[k]} 세우기'로 다시 세울 수 있습니다.`); return;
+          }
+          if (t.dataset.we === 'undo') {
+            const path = R.paths[key], base = path ? (path.base || 0) : 1, n = path ? path.segs.length : 1;
+            if (path && n > base) path.segs.pop();
+            else if (path && base === 0 && path.start) path.start = null;
+            else if (path && !path.start) { D.toast('되돌릴 선이 없습니다. 시작점을 클릭하거나 숫자로 추가하세요.'); return; }
+            else { D.toast('처음부터 있던 벽은 되돌리기로 지워지지 않아요. 벽 목록의 ✕나 초기화 버튼을 쓰세요.'); return; }
+          }
+          if (t.dataset.we === 'clear') { R.paths[key] = { start: null, segs: [], base: 0 }; D.toast(`${WALLS[key]}을 비웠습니다. 시작점을 클릭하거나 숫자로 추가하세요.`); }
+          if (t.dataset.we === 'straight') { delete R.paths[key]; D.toast(`${WALLS[key]}만 처음 직선 벽으로 되돌렸습니다.`); }
+          if (t.dataset.we === 'resetall') {
+            R.paths = {}; Object.assign(R, { backWall: true, leftWall: false, rightWall: true });
+            if (!R[WALL_FLAG[key]]) ui.wallEdit = 'back';
+            D.render(); D.toast('벽만 처음 상태로 되돌렸습니다. 책상과 제품은 그대로입니다.'); return;
+          }
           changed(true);
+        });
+        // 직선 벽 숫자로 추가 [구현]: 길이(cm) + 방향(또는 각도). 끝점에서 이어지고, 시작점이 없으면 이 벽의 처음 시작점에서 시작
+        const num = we.querySelector('.sim-we-num');
+        num.addEventListener('change', e => {
+          if (e.target.name === 'dir') { ui.weDir = e.target.value; num.querySelector('.sim-we-ang').hidden = e.target.value !== 'custom'; }
+          if (e.target.name === 'len') ui.weLen = Number(e.target.value) || ui.weLen;
+          if (e.target.name === 'ang') ui.weAng = Number(e.target.value);
+        });
+        num.addEventListener('submit', e => {
+          e.preventDefault();
+          const f = new FormData(num), len = Math.round(Number(f.get('len'))), dir = String(f.get('dir'));
+          if (!(len >= 5 && len <= 1000)) { D.toast('길이는 5~1000cm 사이로 입력해 주세요.'); return; }
+          const deg = dir === 'custom' ? Number(f.get('ang')) || 0 : Number(dir), rad = deg * Math.PI / 180;
+          ui.weLen = len; ui.weDir = dir; if (dir === 'custom') ui.weAng = deg;
+          const path = own(); if (!path.start) path.start = Object.assign({}, defaultPath(key).start);
+          const a = path.segs.length ? path.segs[path.segs.length - 1].to : path.start;
+          const q = { x: Math.round(a.x + len * Math.cos(rad)), z: Math.round(a.z + len * Math.sin(rad)) };
+          path.segs.push({ type: 'line', to: q });
+          changed(true);
+          if (document.body.contains(num)) D.toast(`직선 ${len}cm를 ${dir === 'custom' ? `${deg}°` : { 0: '오른쪽', 90: '앞쪽', 180: '왼쪽', 270: '뒤쪽' }[dir]}으로 추가했습니다.`);
         });
         we.addEventListener('keydown', e => { if (e.key === 'Escape') { ui.wallEdit = null; D.render(); } });
         // 제목줄을 끌어 창 옮기기
