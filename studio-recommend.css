@@ -1,0 +1,84 @@
+/* 스튜디오 상단 '조건별 추천 3안 · 국내 판매처 가격 비교' 전용. 공통 토큰만 쓰고 .srec- 접두사 아래만 정의합니다.
+ * 버튼을 누르면 .studio-main 안이 3구역으로 바뀝니다: 가격 비교(왼쪽) | 추천 3안(위) + 3D 시뮬레이션(아래).
+ * AI 채팅(.assistant-panel)은 손대지 않아 제자리에 그대로 있습니다. 위치·크기는 js 가 프레임마다 정합니다. */
+.srec-open[aria-pressed="true"] { color: var(--color-primary); background: var(--color-primary-soft); border-color: var(--color-primary); }
+.srec-open .icon, .srec-phead .icon { width: 15px; height: 15px; }
+
+/* 보드가 열린 동안 */
+.srec-on .studio-main { position: relative; overflow: hidden; display: block; }
+.srec-on .studio-upload { display: none; }
+.srec-on .srec-sim { position: absolute; overflow: hidden; border-radius: var(--radius-md); }
+.srec-sim-inner { transform-origin: top left; display: flex; flex-direction: column; gap: 16px; }
+.srec-on .srec-sim-inner { position: absolute; left: 0; top: 0; }
+.studio-main.is-min .srec-sim { cursor: pointer; box-shadow: 0 0 0 1px var(--color-line); }
+.studio-main.is-min .srec-sim-inner { pointer-events: none; user-select: none; }
+.studio-main.is-min .srec-sim::after { content: "3D 시뮬레이션 · 눌러서 크게 보기 ↗"; position: absolute; right: 10px; bottom: 10px; padding: 6px 10px; font-size: 11px; font-weight: 650; color: white; background: #20242ccc; border-radius: 30px; }
+.studio-main.is-min .srec-sim:hover { box-shadow: 0 0 0 2px var(--color-primary); }
+
+/* 밀려 들어오는 두 패널 */
+.srec-rec, .srec-price { position: absolute; overflow: hidden; margin: 0; box-sizing: border-box; }
+.srec-rec { z-index: 2; }
+.srec-price { z-index: 3; }
+.srec-fit { box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+.srec-rec.is-focus, .srec-price.is-focus { box-shadow: inset 0 0 0 2px var(--color-primary); }
+.srec-phead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.srec-phead h2 { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 15px; }
+.srec-close { font-size: 11px; min-height: 30px; padding: 5px 10px; }
+.srec-close kbd { font: inherit; font-size: 9px; color: var(--color-muted); border: 1px solid var(--color-line); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+.srec-sub { margin: 0; font-size: 11px; color: var(--color-muted); }
+
+/* 조건 */
+.srec-cond { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 10px; padding: 10px 12px; background: var(--color-surface-soft); border-radius: var(--radius-md); }
+.srec-cond label { display: grid; gap: 4px; color: var(--color-muted); font-size: 10px; }
+.srec-cond select { font-size: 12px; padding: 5px 8px; min-width: 92px; }
+.srec-cond .srec-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text); padding-bottom: 6px; }
+.srec-cond .pill { margin-left: auto; align-self: center; font-size: 11px; }
+.srec-cond .pill b { font-weight: 650; }
+
+/* 3안 카드 */
+.srec-plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; flex: 1; min-height: 0; }
+.srec-plan { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; text-align: left; padding: 12px 14px; font-weight: 400; border-radius: var(--radius-md); background: var(--color-surface); min-width: 0; }
+.srec-plan[aria-pressed="true"] { border: 2px solid var(--color-primary); background: var(--color-primary-soft); padding: 11px 13px; }
+.srec-tier { font-size: 12px; font-weight: 700; color: var(--color-primary); }
+.srec-plan strong { font-size: 22px; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+.srec-plan small { font-size: 10px; color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.srec-bar { width: 100%; height: 6px; border-radius: 30px; background: var(--color-surface-soft); overflow: hidden; margin: 2px 0; }
+.srec-bar i { display: block; height: 100%; background: var(--color-primary); border-radius: 30px; }
+.srec-bar i.over { background: var(--color-error); }
+
+/* 가격 비교 (세로 목록) */
+.srec-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow: auto; }
+.srec-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 9px 11px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); }
+.srec-list li small { font-size: 10px; color: var(--color-muted); font-weight: 600; display: block; }
+.srec-list li strong { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.srec-low { text-align: right; }
+.srec-low b { display: block; font-size: 13px; font-variant-numeric: tabular-nums; }
+.srec-low em { font-style: normal; font-size: 10px; color: var(--color-success); font-weight: 600; }
+.srec-shops { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; font-size: 10px; color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.srec-shops .is-low { color: var(--color-success); font-weight: 700; }
+.srec-total { padding: 12px 14px; border-radius: var(--radius-md); background: var(--color-primary-soft); display: grid; gap: 2px; }
+.srec-total small { font-size: 10px; color: var(--color-muted); }
+.srec-total strong { font-size: 22px; color: var(--color-primary); letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+.srec-total span { font-size: 11px; color: var(--color-muted); }
+
+/* 좁은 화면: 모션 없이 위아래로 쌓기 */
+.srec-narrow .studio-main { height: auto !important; overflow: visible; display: flex; flex-direction: column; }
+.srec-narrow .srec-sim, .srec-narrow .srec-rec, .srec-narrow .srec-price { position: static; }
+.srec-narrow .srec-sim-inner { position: static; }
+.srec-narrow .srec-fit { width: auto !important; height: auto !important; opacity: 1 !important; }
+.srec-narrow .srec-price { order: -1; }
+.srec-narrow .srec-rec { order: -2; }
+@media (max-width: 700px) { .srec-plans { grid-template-columns: 1fr; } .srec-cond .pill { margin-left: 0; } }
+
+/* ---------- 스튜디오 화면 보정 (넓은 화면에서 3D가 잘리던 문제 등) ----------
+ * studio.js 는 건드리지 않고 여기서 덮어씁니다. 3D 뷰포트가 700:490 비율로 커지는데 바깥 상자가 405px 로 잘라서,
+ * 화면이 넓을수록 책상이 아래로 밀려 잘렸습니다 → 뷰포트를 상자 높이에 딱 맞추고, 상자 높이는 화면 높이에 맞춰 키웁니다. */
+.studio-canvas { height: clamp(405px, 52vh, 600px); }
+.studio-canvas .sim-viewport:not(.big) { aspect-ratio: auto; width: 100%; height: 100%; min-height: 0; }
+.sim-flow { margin: 0; padding: 12px 18px; }
+.sim-flow .sim-push { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.studio-config .sim-walls input { width: auto; padding: 0; }
+.studio-config .sim-walls label { font-size: 12px; color: var(--color-text); }
+.sim-block { margin: 0; padding: 14px 18px; }
+.sim-block:last-child { padding-bottom: 18px; }
+.studio-canvas .sim-viewport:not(.big) .sim-hint { left: 12px; top: 14px; bottom: auto; max-width: calc(100% - 140px); }
