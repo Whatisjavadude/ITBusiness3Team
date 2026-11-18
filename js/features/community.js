@@ -22,7 +22,7 @@
         <div class="community-crumb"><button class="quiet" data-back>← 커뮤니티</button><span>게시물</span></div>
         <div class="community-detail">
           <section class="community-detail-main">
-            <div class="panel community-detail-photo">${D.scene(p.style,p.products)}</div>
+            <div class="panel community-detail-photo">${D.communityPhoto(i,p)}</div>
             <div class="panel community-comments">
               <h2>댓글 ${comments.length}</h2>
               ${comments.length?comments.map(c=>`<div class="community-comment"><b>${c.who}</b><p>${c.text}</p></div>`).join(''):'<p class="muted">아직 댓글이 없어요.</p>'}
@@ -54,7 +54,7 @@
         root.querySelector('[data-comment]').addEventListener('submit',e=>{e.preventDefault();D.toast('댓글 등록은 목업이에요.');});
         root.querySelector('[data-import]').addEventListener('click',()=>{D.state.style=p.style;D.state.products=p.products.slice();detail=null;D.go('studio');D.toast('게시물 세팅을 내 책상에 불러왔어요.');});
       } else {
-        root.innerHTML=D.heading('SPACES & STORIES','다른 사람의 책상에서 찾는 영감','다양한 작업공간의 예시를 살펴보세요. 아래 게시물은 모두 샘플입니다.','<button data-write>+ 내 책상 공유하기</button>')+`<div class="community-grid">${D.presets.slice(0,3).map((p,i)=>`<article class="panel"><div class="community-photo">${D.scene(p.style,p.products)}</div><div class="community-info"><span class="pill">${tags[i]}</span><h2>${titles[i]}</h2><p>${p.description}</p><footer><span>데모 메이커 ${i+1}</span><span class="actions"><button data-open="${i}">자세히</button><button data-like="${i}" aria-pressed="${liked.has(i)}" aria-label="${titles[i]} 좋아요">${liked.has(i)?'♥':'♡'} ${[24,18,32][i]+(liked.has(i)?1:0)}</button></span></footer></div></article>`).join('')}</div><p class="notice" style="margin-top:20px">게시·댓글·계정 기능은 팀원 작업 영역입니다. 현재는 카드 배치와 좋아요 상태만 시연합니다.</p>`;
+        root.innerHTML=D.heading('SPACES & STORIES','다른 사람의 책상에서 찾는 영감','다양한 작업공간의 예시를 살펴보세요. 아래 게시물은 모두 샘플입니다.','<button data-write>+ 내 책상 공유하기</button>')+`<div class="community-grid">${D.presets.slice(0,3).map((p,i)=>`<article class="panel"><div class="community-photo">${D.communityPhoto(i,p)}</div><div class="community-info"><span class="pill">${tags[i]}</span><h2>${titles[i]}</h2><p>${p.description}</p><footer><span>데모 메이커 ${i+1}</span><span class="actions"><button data-open="${i}">자세히</button><button data-like="${i}" aria-pressed="${liked.has(i)}" aria-label="${titles[i]} 좋아요">${liked.has(i)?'♥':'♡'} ${[24,18,32][i]+(liked.has(i)?1:0)}</button></span></footer></div></article>`).join('')}</div><p class="notice" style="margin-top:20px">게시·댓글·계정 기능은 팀원 작업 영역입니다. 현재는 카드 배치와 좋아요 상태만 시연합니다.</p>`;
         root.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>{detail=Number(b.dataset.open);D.render();window.scrollTo({top:0});}));
         root.querySelector('[data-write]').addEventListener('click',()=>D.toast('글쓰기 화면은 목업 예정이에요.'));
       }

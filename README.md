@@ -63,3 +63,8 @@ docs/                      제작 기준·협업 안내·확인 결과
 ```
 
 자료의 출처와 작업 범위는 [제작 기준](docs/FOUNDATION.md#근거와-상태), 확인 결과는 [QA 기록](docs/QA.md)에 있습니다.
+
+## 이미지
+
+- 프리셋·제품 기본 이미지는 3D 렌더(`assets/presets/*.webp`, `assets/products/*-render.webp`)입니다.
+- 실제 사진은 정해진 이름으로 넣기만 하면 바뀝니다 → `assets/community/README.md` 참고. 연결 코드는 `js/media.js`.
