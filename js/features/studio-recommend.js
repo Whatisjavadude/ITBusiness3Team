@@ -2,7 +2,7 @@
  * 내 데스크 스튜디오 · 상단 버튼 2개 (조건별 추천 3안 / 국내 판매처 가격 비교)
  *
  * studio.js는 수정하지 않습니다. 스튜디오 화면이 그려진 뒤(mount 후) 아래 기능을 덧붙입니다.
- *   1) 제목 옆 버튼 2개 추가
+ *   1) 버튼 2개 추가: 책상 패널 제목 줄(.studio-tools)의 '프리셋 불러오기' 앞 (예전 상단 제목 영역이 있으면 그 옆)
  *   2) 버튼을 누르면 4장면 모션으로 화면이 3열로 바뀝니다 (팀 와이어프레임 기준).
  *        [국내 가격 비교 리스트] | [조건별 추천 3안 / 3D 시뮬레이션] | [AI 채팅]
  *      - AI 채팅 패널은 움직이지 않습니다.
@@ -242,16 +242,20 @@
   D.features.studio.mount = function (node) {
     base.call(this, node);
     root = node;
-    const head = node.querySelector('.page-heading'), main = node.querySelector('.studio-main');
-    if (!head || !main) return;
+    // 상단 제목 영역이 없어지고 버튼 줄이 책상 패널 제목 줄(.studio-tools)로 옮겨졌습니다. 예전 구조(.page-heading .actions)도 지원합니다.
+    const tools = node.querySelector('.studio-tools') || node.querySelector('.page-heading .actions'), main = node.querySelector('.studio-main');
+    if (!tools || !main) return;
     // 시뮬레이션 영역(기존 내용 전체)을 하나로 감싸 크기를 바꿀 수 있게 합니다 (내용·이벤트는 그대로)
     const sim = document.createElement('div'); sim.className = 'srec-sim';
     const inner = document.createElement('div'); inner.className = 'srec-sim-inner'; sim.append(inner);
     while (main.firstChild) inner.append(main.firstChild);
     main.append(sim);
-    head.querySelector('.actions').insertAdjacentHTML('afterbegin', `<button type="button" class="srec-open" data-srec="recommend" aria-pressed="false">${D.icon('grid')} 조건별 추천 3안</button><button type="button" class="srec-open" data-srec="price" aria-pressed="false">${D.icon('bag')} 국내 판매처 가격 비교</button>`);
-    head.querySelectorAll('[data-srec]').forEach(b => b.addEventListener('click', () => { if (open && focus === b.dataset.srec) closeBoard(); else openBoard(b.dataset.srec, true); }));
-    sim.addEventListener('click', e => { if (open && wide()) { e.preventDefault(); e.stopPropagation(); closeBoard(); } }, true);
+    const btns = `<button type="button" class="srec-open" data-srec="recommend" aria-pressed="false">${D.icon('grid')} 조건별 추천 3안</button><button type="button" class="srec-open" data-srec="price" aria-pressed="false">${D.icon('bag')} 국내 판매처 가격 비교</button>`;
+    const presets = tools.querySelector('a[href="#presets"]');
+    if (presets) presets.insertAdjacentHTML('beforebegin', btns); else tools.insertAdjacentHTML('afterbegin', btns);
+    tools.querySelectorAll('[data-srec]').forEach(b => b.addEventListener('click', () => { if (open && focus === b.dataset.srec) closeBoard(); else openBoard(b.dataset.srec, true); }));
+    // 버튼 줄이 시뮬레이션 영역 안에 있으므로, 버튼 클릭은 '작아진 시뮬레이션 클릭 → 닫기'로 보지 않습니다
+    sim.addEventListener('click', e => { if (e.target.closest('[data-srec]')) return; if (open && wide()) { e.preventDefault(); e.stopPropagation(); closeBoard(); } }, true);
     main.addEventListener('click', e => {
       if (!open) return;
       const t = e.target.closest('button'); if (!t) return;
