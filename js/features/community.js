@@ -22,12 +22,7 @@
         <div class="community-crumb"><button class="quiet" data-back>← 커뮤니티</button><span>게시물</span></div>
         <div class="community-detail">
           <section class="community-detail-main">
-            <div class="panel community-detail-photo">${D.communityPhoto(i,p)}</div>
-            <div class="panel community-design">
-              <div class="community-items-head"><h2>이 사람이 꾸민 배치</h2><span class="muted">위에서 본 책상 · ${p.width} × ${p.depth}cm</span></div>
-              ${D.setupPlan(p)}${D.setupLegend(p)}
-              <p class="muted">항목에 마우스를 올리면 제품 이름이 보여요. '스튜디오에서 열기'를 누르면 이 배치를 3D로 볼 수 있어요.</p>
-            </div>
+            <div class="panel community-detail-photo">${D.scene(p.style,p.products)}</div>
             <div class="panel community-comments">
               <h2>댓글 ${comments.length}</h2>
               ${comments.length?comments.map(c=>`<div class="community-comment"><b>${c.who}</b><p>${c.text}</p></div>`).join(''):'<p class="muted">아직 댓글이 없어요.</p>'}
@@ -44,10 +39,8 @@
               <button data-save>저장</button>
             </div>
             <div class="panel community-items">
-              <div class="community-items-head"><h2>이 책상에 쓰인 제품 ${D.setupParts(p.id).length}</h2><span class="muted">가상 가격</span></div>
-              ${D.setupParts(p.id).map(x=>`<div class="community-part"><small>${x.cat}</small><b>${D.escape(x.name)}</b><span>${D.money(x.price)}</span></div>`).join('')}
-              <div class="community-part-total"><span>합계</span><strong>${D.money(D.setupTotal(p.id))}</strong></div>
-              <p class="muted community-fit">${p.width>D.state.width?`내 책상(${D.state.width}cm)보다 ${p.width-D.state.width}cm 넓은 책상이에요. 불러오면 내 책상 크기에 맞춰 열려요.`:`내 책상(${D.state.width}cm)에 그대로 들어가는 크기예요.`}</p>
+              <div class="community-items-head"><h2>이 책상에 쓰인 제품</h2><span class="muted">내 책상 ${D.state.width}cm 기준</span></div>
+              ${items.map(x=>{const warn=x.width>D.state.width*.5;return `<div class="community-item">${D.productArt(x)}<div><b>${x.name}</b><small>${D.money(x.price)} · 가상 가격</small></div><strong class="${warn?'warning':''}">${warn?'확인 필요':'여유 있어요'}</strong></div>`;}).join('')}
             </div>
             <div class="community-import">
               <b>내 책상 크기로 불러오기</b>
@@ -59,9 +52,9 @@
         root.querySelector('[data-back]').addEventListener('click',()=>{detail=null;D.render();});
         root.querySelector('[data-save]').addEventListener('click',()=>D.toast('저장은 목업이에요. 계정 기능이 붙으면 동작해요.'));
         root.querySelector('[data-comment]').addEventListener('submit',e=>{e.preventDefault();D.toast('댓글 등록은 목업이에요.');});
-        root.querySelector('[data-import]').addEventListener('click',()=>{D.state.name=titles[i];D.state.style=p.style;D.state.products=p.products.slice();detail=null;D.go('studio');D.toast('게시물 세팅을 내 책상에 불러왔어요.');});
+        root.querySelector('[data-import]').addEventListener('click',()=>{D.state.style=p.style;D.state.products=p.products.slice();detail=null;D.go('studio');D.toast('게시물 세팅을 내 책상에 불러왔어요.');});
       } else {
-        root.innerHTML=D.heading('SPACES & STORIES','다른 사람의 책상에서 찾는 영감','다양한 작업공간의 예시를 살펴보세요. 아래 게시물은 모두 샘플입니다.','<button data-write>+ 내 책상 공유하기</button>')+`<div class="community-grid">${D.presets.slice(0,3).map((p,i)=>`<article class="panel"><div class="community-photo">${D.communityPhoto(i,p)}</div><div class="community-info"><span class="pill">${tags[i]}</span><h2>${titles[i]}</h2><p>${p.description}</p><footer><span>데모 메이커 ${i+1}</span><span class="actions"><button data-open="${i}">자세히</button><button data-like="${i}" aria-pressed="${liked.has(i)}" aria-label="${titles[i]} 좋아요">${liked.has(i)?'♥':'♡'} ${[24,18,32][i]+(liked.has(i)?1:0)}</button></span></footer></div></article>`).join('')}</div><p class="notice" style="margin-top:20px">게시·댓글·계정 기능은 팀원 작업 영역입니다. 현재는 카드 배치와 좋아요 상태만 시연합니다.</p>`;
+        root.innerHTML=D.heading('SPACES & STORIES','다른 사람의 책상에서 찾는 영감','다양한 작업공간의 예시를 살펴보세요. 아래 게시물은 모두 샘플입니다.','<button data-write>+ 내 책상 공유하기</button>')+`<div class="community-grid">${D.presets.slice(0,3).map((p,i)=>`<article class="panel"><div class="community-photo">${D.scene(p.style,p.products)}</div><div class="community-info"><span class="pill">${tags[i]}</span><h2>${titles[i]}</h2><p>${p.description}</p><footer><span>데모 메이커 ${i+1}</span><span class="actions"><button data-open="${i}">자세히</button><button data-like="${i}" aria-pressed="${liked.has(i)}" aria-label="${titles[i]} 좋아요">${liked.has(i)?'♥':'♡'} ${[24,18,32][i]+(liked.has(i)?1:0)}</button></span></footer></div></article>`).join('')}</div><p class="notice" style="margin-top:20px">게시·댓글·계정 기능은 팀원 작업 영역입니다. 현재는 카드 배치와 좋아요 상태만 시연합니다.</p>`;
         root.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>{detail=Number(b.dataset.open);D.render();window.scrollTo({top:0});}));
         root.querySelector('[data-write]').addEventListener('click',()=>D.toast('글쓰기 화면은 목업 예정이에요.'));
       }

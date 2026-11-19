@@ -4,7 +4,7 @@
   D.go=page=>{if(D.current()===page)D.render();else location.hash=page;};
   D.render=()=>{
     const key=D.current(),feature=D.features[key];
-    const crumb=document.querySelector('#breadcrumb-title');if(crumb)crumb.textContent=feature.title;
+    document.querySelector('#breadcrumb-title').textContent=feature.title;
     document.title=`${feature.title} · Deskspace`;
     document.querySelectorAll('nav [data-page]').forEach(a=>{if(a.dataset.page===key)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
     if(D.state.screen==='ready')feature.mount(root);
