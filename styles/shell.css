@@ -35,3 +35,6 @@ input,select,textarea { border: 1px solid var(--color-line); border-radius: var(
 @media(max-width:900px) { .app-shell { grid-template-columns: 1fr; }.sidebar { padding: 14px 18px; border-right: 0; border-bottom: 1px solid var(--color-line); }.sidebar .brand { font-size: 22px; }.workspace-label,.nav-label,.sidebar-note,.sidebar-footer { display: none; }nav { display: flex; overflow-x: auto; margin-top: 12px; gap: 3px; }nav a { white-space: nowrap; padding: 9px 12px; }nav .icon { width: 15px; }.topbar { min-height: 52px; }.guide-link { display: none; } }
 @media(max-width:600px) { main { padding: 22px 14px; }.topbar { padding: 0 14px; }.topbar .badge { display: none; }.page-heading { display: block; }.page-heading .actions { margin-top: 16px; }h1 { font-size: 24px; }.demo-footer { align-items: flex-start; flex-direction: column; padding: 14px; } }
 @media(prefers-reduced-motion:reduce) { * { transition: none !important; animation: none !important; } }
+
+/* 왼쪽 바를 화면에 고정: 페이지를 스크롤해도 메뉴·"좋은 공간의 시작"·워크스페이스 카드가 늘 보이도록 따라 내려옵니다 */
+@media (min-width: 901px) { .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; scrollbar-width: none; } .sidebar::-webkit-scrollbar { display: none; } }
