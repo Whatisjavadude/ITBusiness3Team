@@ -36,5 +36,27 @@ input,select,textarea { border: 1px solid var(--color-line); border-radius: var(
 @media(max-width:600px) { main { padding: 22px 14px; }.topbar { padding: 0 14px; }.topbar .badge { display: none; }.page-heading { display: block; }.page-heading .actions { margin-top: 16px; }h1 { font-size: 24px; }.demo-footer { align-items: flex-start; flex-direction: column; padding: 14px; } }
 @media(prefers-reduced-motion:reduce) { * { transition: none !important; animation: none !important; } }
 
-/* 왼쪽 바를 화면에 고정: 페이지를 스크롤해도 메뉴·"좋은 공간의 시작"·워크스페이스 카드가 늘 보이도록 따라 내려옵니다 */
-@media (min-width: 901px) { .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; scrollbar-width: none; } .sidebar::-webkit-scrollbar { display: none; } }
+/* 1) 모든 페이지 맨 위 "워크스페이스 / (페이지명) · 수업용 프로토타입 · 팀 가이드 ↗" 바 없애기
+ *    index.html에 <header class="topbar">가 남아 있어도 보이지 않습니다. (app.js의 breadcrumb 갱신은 요소가 없어도 안전) */
+.topbar { display: none !important; }
+
+/* 2) 왼쪽 바를 화면에 고정 (넓은 화면)
+ *    sticky는 조상 요소에 overflow가 걸리면 풀려 버려서, 페이지가 길어지면 "좋은 공간의 시작"·"데모 워크스페이스"가
+ *    페이지 맨 아래로 밀려났습니다 → position: fixed로 바꿔 창 높이에 딱 맞춰 붙입니다.
+ *    사이드바가 흐름에서 빠지므로 본문은 2번째 칸에 직접 둡니다. */
+@media (min-width: 901px) {
+  .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-width); height: 100vh; height: 100dvh; z-index: 10; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+  .sidebar::-webkit-scrollbar { display: none; }
+  .main-shell { grid-column: 2; }
+}
+/* 창 높이가 낮을 때는 간격을 줄여 메뉴·카드·워크스페이스가 한 화면에 들어오게 합니다 */
+@media (min-width: 901px) and (max-height: 760px) {
+  .sidebar { padding-top: 20px; }
+  .workspace-label { margin: 20px 0 18px; padding: 9px 12px; }
+  nav { gap: 3px; }
+  nav a { padding: 9px 12px; }
+  .sidebar-note { padding: 14px 12px; margin-top: auto; }
+  .sidebar-note p { margin-bottom: 8px; line-height: 1.6; }
+  .sidebar-footer { padding-top: 14px; margin-top: 14px; }
+}
+@media (min-width: 901px) and (max-height: 620px) { .sidebar-note p { display: none; } }
