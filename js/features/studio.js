@@ -21,8 +21,8 @@
   const photos = { desk: '', style: '' };
   const ui = { selected: null, before: null, estimated: false, measured: null, ownChange: false, big: false, wallEdit: null, wallTool: 'line', wePos: null };
   // 카메라: target(바라보는 점) + 방향(theta·phi) + 거리(radius). target이 null이면 책상 가운데를 봅니다.
-  const view = { theta: -0.6, phi: 0.5, radius: 0, target: null };
-  const resetView = () => Object.assign(view, { theta: -0.6, phi: 0.5, radius: 0, target: null });
+  const view = { theta: 0, phi: 0.24, radius: 0, target: null };
+  const resetView = () => Object.assign(view, { theta: 0, phi: 0.24, radius: 0, target: null });
   let observer = null;
 
   /* ---------- 제품 치수 ----------
@@ -224,8 +224,8 @@
     };
     function camera() {
       const H = room().height;
-      if (!view.radius) { view.radius = Math.max(D.state.width, D.state.depth * 1.6) * 1.5 + 60; view.target = null; }
-      const T = view.target || v3(0, H - 6, 0), cp = Math.cos(view.phi);
+      if (!view.radius) { view.radius = Math.max(D.state.width, D.state.depth * 1.6) * 0.84; view.target = null; } // 처음 시점: 정면에서 살짝 내려다보며 책상이 화면을 넓게 채우도록 (책상 140cm → 거리 약 118cm) // 처음 시점: 정면에서 살짝 내려다보며 책상이 화면 가운데 아래쪽을 채우도록
+      const T = view.target || v3(0, H + 24, 0), cp = Math.cos(view.phi);
       const E = add(T, mul(v3(cp * Math.sin(view.theta), Math.sin(view.phi), cp * Math.cos(view.theta)), view.radius));
       const f = norm(sub(T, E)), right = norm(cross(f, v3(0, 1, 0)));
       sim.focal = sim.h / (2 * Math.tan(0.42));
@@ -394,7 +394,7 @@
     const pt = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
     const grabY = id => room().height + baseY(id, layout()) + spec(id).h / 2;
     const offset = () => { const cp = Math.cos(view.phi); return v3(cp * Math.sin(view.theta), Math.sin(view.phi), cp * Math.cos(view.theta)); };
-    const target = () => view.target || v3(0, room().height - 6, 0);
+    const target = () => view.target || v3(0, room().height + 24, 0);
     const clampPitch = v => Math.min(1.45, Math.max(-0.35, v));
     const keepAboveFloor = () => { const E = add(target(), mul(offset(), view.radius)); if (E.y < 8) view.target = v3(target().x, target().y + (8 - E.y), target().z); };
     function pan(dx, dy) { // 화면 픽셀만큼 카메라와 바라보는 점을 함께 옮깁니다
@@ -848,12 +848,17 @@
     if (document.getElementById('sim-style')) return;
     const el = document.createElement('style'); el.id = 'sim-style';
     el.textContent = `
-.studio-canvas .sim-viewport{position:relative;width:100%;max-width:100%;margin-inline:auto;aspect-ratio:700/490;min-height:220px;border-radius:inherit}
+.studio-canvas .sim-viewport{position:relative;width:100%;max-width:100%;height:100%;margin-inline:auto;min-height:220px;border-radius:inherit} /* .studio-canvas(팀 CSS 높이 405px) 칸을 꽉 채움 */
 .studio-canvas .sim-canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none;outline:none;border-radius:inherit}
 .sim-big-btn{position:absolute;top:10px;right:10px;z-index:4;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:6px 10px;border-radius:8px;border:1px solid rgba(27,42,65,.18);background:rgba(255,255,255,.92);color:#1b2a41;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.sim-we button{min-height:28px;padding:4px 9px;font-size:11px;border-radius:7px}.sim-we .sim-we-chip button{min-height:24px;border-radius:0}.sim-we .sim-we-add{min-height:24px;border-radius:999px}
+.sim-ms button{min-height:30px;padding:5px 10px;font-size:12px}
+#sim-measure{min-height:30px;padding:5px 11px;font-size:11px;margin-top:10px}
+.sim-big-btn{min-height:30px}
 .sim-big-btn:hover{background:#fff;border-color:#e07a2f}.sim-big-btn kbd{font:inherit;font-size:11px;padding:0 5px;border-radius:4px;background:#eef0f3;border:1px solid #d6dbe1}
 .sim-big-info{display:none}
-.sim-hint{position:absolute;left:10px;bottom:8px;z-index:3;font-size:11px;color:#34404b;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:6px;pointer-events:none}
+.studio-canvas .studio-canvas-label{display:none}
+.sim-hint{position:absolute;left:10px;top:10px;z-index:3;font-size:11px;color:#34404b;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:6px;pointer-events:none}
 .sim-viewport.big .sim-hint{display:none}
 .sim-backdrop{display:none}
 html.sim-lock,html.sim-lock body{overflow:hidden}
@@ -902,10 +907,11 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
 .sim-we-add{font-size:12px;border:1px dashed #b9b1a3;border-radius:999px;background:#faf8f3;padding:3px 9px;cursor:pointer}
 .sim-we-num{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;background:#faf8f3;border:1px solid #ece6db;border-radius:8px;padding:7px 9px}
 .sim-we-num strong{font-size:12px;width:100%}.sim-we-num label{display:inline-flex;align-items:center;gap:4px;font-size:12px}
-.sim-we-num input[type=number]{width:64px}.sim-we-num small{width:100%;font-size:11px}.sim-we-num [hidden]{display:none}
-.sim-we button{min-height:28px;padding:4px 9px;font-size:11px;border-radius:7px}.sim-we .sim-we-chip button{min-height:24px;border-radius:0}.sim-we .sim-we-add{min-height:24px;border-radius:999px}
+.sim-we-num input[type=number]{width:64px}.sim-we-num small{width:100%;font-size:11px}
 .panel-heading .studio-tools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
-.studio-tools .btn,.studio-tools #save-layout,.studio-tools .srec-open{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;min-height:27px;padding:4px 9px;font-size:10px}.studio-tools svg{width:13px;height:13px;flex:none}
+.studio-tools .btn,.studio-tools #save-layout{white-space:nowrap}
+.studio-tools .btn,.studio-tools #save-layout{display:inline-flex;align-items:center;gap:5px;min-height:27px;padding:4px 9px;font-size:10px}.studio-tools svg{width:13px;height:13px;flex:none}
+.sim-we-num [hidden]{display:none}
 .sim-we-hint{margin:0;color:#5f6672;line-height:1.5}
 .sim-photo-result{margin-top:10px;padding:10px 12px;border:1px solid rgba(0,0,0,.08);border-radius:10px;display:grid;gap:8px;font-size:13px}
 .sim-photo-result p{margin:0;font-size:12px;line-height:1.5}
@@ -914,7 +920,8 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
 .sim-check{display:inline-flex;gap:6px;align-items:center;font-weight:600}
 .studio-canvas .sim-canvas:active{cursor:grabbing}.studio-canvas .sim-canvas:focus-visible{box-shadow:inset 0 0 0 3px #e07a2f}
 .pill.sim-real{background:#dff1ec;color:#17705f}.pill.sim-sample{background:#fdebd9;color:#a8541b}
-.sim-block{margin-top:12px;padding-top:12px;border-top:1px solid rgba(0,0,0,.08);display:grid;gap:8px;font-size:13px}
+.sim-block{margin:0;padding:14px 18px;border-top:1px solid var(--color-line,rgba(0,0,0,.08));display:grid;gap:8px;font-size:12px}
+.sim-block button{min-height:30px;padding:5px 10px;font-size:11px}.sim-block .sim-chips button{font-weight:500}
 .sim-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.sim-push{margin-left:auto}
 .sim-list{list-style:none;margin:0;padding:0;display:grid;gap:4px}
 .sim-list li button{all:unset;cursor:pointer}.sim-list:not(.plain) li::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:middle}
@@ -927,7 +934,8 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
 .sim-compare .item-after{fill:rgba(31,138,138,.5);stroke:#1f8a8a;stroke-width:.6}.sim-compare .item-after.bad{fill:rgba(224,72,62,.5);stroke:#e0483e}
 .sim-compare .move{stroke:#e07a2f;stroke-width:.8;stroke-dasharray:2 1.2}
 .studio-config .sim-walls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-.studio-config .sim-walls label{display:inline-flex;gap:4px;align-items:center;font-size:13px}
+.studio-config .sim-walls label{display:inline-flex;gap:5px;align-items:center;font-size:11px;color:var(--color-text,#20242c)}
+.studio-config .sim-walls input{width:auto;padding:0;margin:0}
 @media (max-width:640px){.sim-compare{grid-template-columns:1fr}}`;
     document.head.appendChild(el);
   }
@@ -943,8 +951,7 @@ html.sim-lock .sim-backdrop{display:block;position:fixed;inset:0;background:rgba
       const wallOpt = (k, l) => `<label><input type="checkbox" name="${k}" ${R[k] ? 'checked' : ''}> ${l}</label>`;
 
       // 기존 화면 구조 유지 · 바뀐 곳: 캔버스 내용, 라벨 문구, 크기 폼 항목 추가, 패널 아래 점검/변화 영역, 사진 영역 추정 버튼
-      // 상단 제목 영역(YOUR SPACE, YOUR WAY …)은 없애고, 그 자리의 버튼들은 책상 패널 제목 줄(.studio-tools)로 옮겼습니다.
-      // studio-recommend.js의 '조건별 추천 3안'·'국내 판매처 가격 비교' 버튼도 이 줄의 '프리셋 불러오기' 앞에 들어옵니다.
+      // 상단 제목 영역(YOUR SPACE, YOUR WAY …)은 없애고, 그 자리의 프리셋 불러오기·구성 저장 버튼은 책상 패널 제목 줄로 옮겼습니다.
       root.innerHTML = `
       <div class="studio-grid"><div class="studio-main">
         <section class="panel" aria-label="책상 배치 미리보기"><div class="panel-heading"><h2>${D.escape(state.name)}</h2><div class="studio-tools"><span class="pill purple">3D 배치</span><button id="reset-layout">초기화</button><a class="btn" href="#presets">${D.icon('grid')} 프리셋 불러오기</a><button class="primary" id="save-layout">${D.icon('save')} 구성 저장</button></div></div>
