@@ -91,3 +91,19 @@
 .sim-block { margin: 0; padding: 14px 18px; }
 .sim-block:last-child { padding-bottom: 18px; }
 .studio-canvas .sim-viewport:not(.big) .sim-hint { left: 12px; top: 14px; bottom: auto; max-width: calc(100% - 140px); }
+
+/* ---------- 보드가 열린 동안 작아진 시뮬레이션: 3D 화면만 보여주기 ----------
+ * js가 프레임마다 .srec-sim-inner 에 넣는 scale·width 를 덮어써, 패널 전체를 줄이는 대신
+ * 3D 캔버스만 .srec-sim 크기에 꽉 차게 그립니다. 눌러서 원래 화면으로 돌아가는 동작은 그대로입니다. */
+.srec-on .srec-sim { transform: scale(.985); transform-origin: 50% 50%; }
+.srec-on .srec-sim-inner { inset: 0; width: 100% !important; height: 100%; transform: none !important; gap: 0; }
+.srec-on .srec-sim-inner > :not(:first-child) { display: none; }
+.srec-on .srec-sim-inner > .panel:first-child { height: 100%; border: 0; border-radius: inherit; box-shadow: none; }
+.srec-on .srec-sim-inner > .panel:first-child > :not(.studio-canvas) { display: none; }
+.srec-on .srec-sim .studio-canvas { height: 100% !important; border-radius: inherit; }
+.srec-on .srec-sim :is(.sim-big-btn, .sim-hint, .studio-canvas-bottom, .studio-canvas-label, .sim-we) { display: none; }
+/* 테두리: 바깥 그림자 대신 3D 위에 겹친 안쪽 테두리로 그려, 가장자리에서 잘리지 않게 합니다 */
+.studio-main.is-min .srec-sim, .studio-main.is-min .srec-sim:hover { box-shadow: none; }
+.studio-main.is-min .srec-sim::before { content: ""; position: absolute; inset: 0; z-index: 6; border: 1px solid var(--color-line); border-radius: inherit; pointer-events: none; }
+.studio-main.is-min .srec-sim:hover::before { border: 2px solid var(--color-primary); }
+.studio-main.is-min .srec-sim::after { z-index: 7; }
